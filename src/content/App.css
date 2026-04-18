@@ -1,9 +1,10 @@
-#lyrics-pip-button {
+button {
   position: fixed;
   top: 200px;
   right: 100px;
   transform: translate(var(--x, 0px), var(--y, 0px));
   border-radius: 100%;
+  border: none;
   width: 36px;
   height: 36px;
   line-height: 36px;
@@ -15,4 +16,5 @@
   color: white;
   font-size: 20px;
   font-family: 'bilibili-helper-2-iconfont';
+  content: '词';
 }

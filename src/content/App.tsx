@@ -1,17 +1,17 @@
-import { useState } from 'react'
-import { createRoot } from 'react-dom/client';
-import PipApp from './PipApp.tsx'
-import './PipButton.css'
+import { StrictMode, useState } from 'react'
+import { createRoot } from 'react-dom/client'
+import PipApp from '../pip/App.tsx'
+import './App.css'
 
 declare global {
   interface DocumentPictureInPicture {
-    requestWindow: (options?: any) => Promise<Window>;
+    requestWindow: (options?: any) => Promise<Window>
   }
 
-  var documentPictureInPicture: DocumentPictureInPicture;
+  var documentPictureInPicture: DocumentPictureInPicture
 }
 
-export default function PipButton() {
+export default function App() {
   const [isClicking, setIsClicking] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [translateX, setTranslateX] = useState(0)
@@ -23,8 +23,7 @@ export default function PipButton() {
   const [pipWindow, setPipWindow] = useState<Window | null>(null)
 
   return (
-    <div
-      id='#lyrics-pip-button'
+    <button
       style={{
         "--translateX": `${translateX}px`,
         "--translateY": `${translateY}px`,
@@ -62,8 +61,15 @@ export default function PipButton() {
         pipWindow!.document.addEventListener('pagehide', () => {
           setPipWindow(null)
         })
-        createRoot(pipWindow!.document.body).render(PipApp())
+        const container = pipWindow!.document.createElement('div')
+        container.id = 'lyrics-display-pip'
+        document.body.appendChild(container)
+        createRoot(container).render(
+          <StrictMode>
+            <PipApp />
+          </StrictMode>,
+        )
       }}
-    >词</div>
+    />
   )
 }
