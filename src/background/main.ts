@@ -1,3 +1,8 @@
+import { createRoot } from 'react-dom/client'
+
+console.log("From Background!!!")
+console.log(createRoot)
+
 chrome.runtime.onInstalled.addListener(() => {
   console.log('Chrome extension installed')
 })

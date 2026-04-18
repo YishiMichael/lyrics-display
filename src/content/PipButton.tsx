@@ -24,6 +24,7 @@ export default function PipButton() {
 
   return (
     <div
+      id='#lyrics-pip-button'
       style={{
         "--translateX": `${translateX}px`,
         "--translateY": `${translateY}px`,
