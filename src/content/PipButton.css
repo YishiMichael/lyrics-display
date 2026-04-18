@@ -1,0 +1,18 @@
+div {
+  position: fixed;
+  top: 200px;
+  right: 100px;
+  transform: translate(var(--x, 0px), var(--y, 0px));
+  border-radius: 100%;
+  width: 36px;
+  height: 36px;
+  line-height: 36px;
+  text-align: center;
+  background-color: #fb7299;
+  cursor: pointer;
+  user-select: none;
+  z-index: 1;
+  color: white;
+  font-size: 20px;
+  font-family: 'bilibili-helper-2-iconfont';
+}
