@@ -1,7 +1,10 @@
-import { StrictMode, useState } from 'react'
-import { createRoot } from 'react-dom/client'
+import { StrictMode, useEffect, useRef, useState } from 'react'
+// import { createRoot } from 'react-dom/client'
 import PipApp from '../pip/App.tsx'
+import Icon from '@/assets/bootstrap/music-note-list.svg?react'
 import './App.css'
+import { createRoot } from 'react-dom/client'
+import { StyleSheetManager } from 'styled-components'
 
 declare global {
   interface DocumentPictureInPicture {
@@ -11,65 +14,129 @@ declare global {
   var documentPictureInPicture: DocumentPictureInPicture
 }
 
+interface Position {
+  x: number
+  y: number
+}
+
+async function openPipWindow() {
+  const win = await documentPictureInPicture.requestWindow({
+    width: 600,  // TODO: storage
+    height: 300,
+  })
+  createRoot(win.document.body).render(
+    <StrictMode>
+      <StyleSheetManager target={win.document.head}>
+        <PipApp />
+      </StyleSheetManager>
+    </StrictMode>,
+  )
+  return win
+}
+
 export default function App() {
-  const [isClicking, setIsClicking] = useState(false)
-  const [isDragging, setIsDragging] = useState(false)
-  const [translateX, setTranslateX] = useState(0)
-  const [translateY, setTranslateY] = useState(0)
-  const [clientX, setClientX] = useState(0)
-  const [clientY, setClientY] = useState(0)
-  // const [transformX, setTransformX] = useState(0)
-  // const [transformY, setTransformY] = useState(0)
+  const [translate, setTranslate] = useState<Position>({ x: 0, y: 0 })
+  const translateOffset = useRef<Position | null>(null)
+  const isDragging = useRef(false)
   const [pipWindow, setPipWindow] = useState<Window | null>(null)
+
+  // const captureRef = useRef<HTMLDivElement | null>(null)
+  // const videoRef = useRef<HTMLVideoElement | null>(null)
+  // const [stream, setStream] = useState<MediaStream | null>(null)
+
+  const onMouseDown = (event: any) => {
+    translateOffset.current = {
+      x: translate.x - event.clientX,
+      y: translate.y - event.clientY,
+    }
+    isDragging.current = false
+  }
+
+  const onMouseMove = (event: any) => {
+    if (translateOffset.current === null) {
+      return
+    }
+    setTranslate({
+      x: event.clientX + translateOffset.current.x,
+      y: event.clientY + translateOffset.current.y,
+    })
+    isDragging.current = true
+  }
+
+  const onMouseUp = async () => {
+    if (translateOffset.current === null) {
+      return
+    }
+    translateOffset.current = null
+    if (isDragging.current) {
+      return
+    }
+
+    if (!pipWindow) {
+      const newPipWindow = await openPipWindow()
+      setPipWindow(newPipWindow)
+      newPipWindow.addEventListener('pagehide', () => {
+        setPipWindow(null)
+      })
+    } else {
+      pipWindow.close()
+      setPipWindow(null)
+    }
+  }
+
+  useEffect(() => {
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+    }
+  })
+
+  // useEffect(() => {
+  //   startCapture()
+  // })
+
+  // 4. Enter Picture-in-Picture
+  // const enterPiP = async () => {
+  //   const video = videoRef.current;
+  //   if (!video) return;
+
+  //   if (document.pictureInPictureElement) {
+  //     await document.exitPictureInPicture();
+  //     return;
+  //   }
+
+  //   await video.requestPictureInPicture();
+  // };
+
+  // useEffect(() => {
+  //   return (async () => {
+  //     const stream = await navigator.mediaDevices.getDisplayMedia()
+  //     const [track] = stream.getVideoTracks()
+  //     const captureTarget = document.querySelector("#lyrics-display #pip-body")
+  //     const restrictionTarget = await RestrictionTarget.fromElement(captureTarget)
+  //     await track.restrictTo(restrictionTarget)
+
+  //     return () => {
+  //       (async () => {
+  //         await track.restrictTo(null)
+  //       })()
+  //     }
+  //   })()
+  // })
 
   return (
     <button
+      id='lyrics-display'
       style={{
-        "--translateX": `${translateX}px`,
-        "--translateY": `${translateY}px`,
+        '--translateX': `${translate.x}px`,
+        '--translateY': `${translate.y}px`,
       } as React.CSSProperties}
-      onMouseDown={(event) => {
-        setIsClicking(true)
-        setClientX(event.clientX)
-        setClientY(event.clientY)
-      }}
-      onMouseMove={(event) => {
-        if (!isClicking) {
-          return
-        }
-        setIsDragging(true)
-        setTranslateX(translateX + event.clientX - clientX)
-        setTranslateY(translateY + event.clientY - clientY)
-        setClientX(event.clientX)
-        setClientY(event.clientY)
-      }}
-      onMouseUp={async () => {
-        setIsClicking(false)
-        if (isDragging) {
-          setIsDragging(false)
-          return
-        }
-        if (pipWindow) {
-          pipWindow.close()
-          setPipWindow(null)
-          return
-        }
-        setPipWindow(await documentPictureInPicture.requestWindow({
-          width: 600,  // TODO: storage
-          height: 300,
-        }))
-        pipWindow!.document.addEventListener('pagehide', () => {
-          setPipWindow(null)
-        })
-        const container = pipWindow!.document.createElement('div')
-        container.id = 'lyrics-display-pip'
-        document.body.appendChild(container)
-        createRoot(container).render(
-          <StrictMode>
-            <PipApp />
-          </StrictMode>,
-        )
-      }}
-    />
+      onMouseDown={onMouseDown}
+    >
+      <Icon />
+    </button>
   )
 }
