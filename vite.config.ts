@@ -5,7 +5,6 @@ import { defineConfig } from 'vite'
 import zip from 'vite-plugin-zip-pack'
 import manifest from './manifest.config.js'
 import { name, version } from './package.json'
-import svgr from 'vite-plugin-svgr'
 
 export default defineConfig({
   resolve: {
@@ -17,13 +16,17 @@ export default defineConfig({
     react(),
     crx({ manifest }),
     zip({ outDir: 'release', outFileName: `crx-${name}-${version}.zip` }),
-    svgr(),
   ],
   server: {
     cors: {
       origin: [
         /chrome-extension:\/\//,
       ],
+    },
+    hmr: {
+      host: "localhost",
+      protocol: "ws",
+      port: 5173,
     },
   },
 })

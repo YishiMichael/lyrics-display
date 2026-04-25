@@ -1,4 +1,28 @@
 :root {
+  --ld-theme-color: #39c5bb;
+  --ld-inactive-color: #666;
+  --ld-background-color: #1e1e1e;
+  --ld-text-color: white;
+
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-width: 360px;
+  max-width: 1280px;
+  min-height: 100vh;
+  background-color: var(--ld-background-color);
+  color: var(--ld-text-color);
+}
+
+/*:root {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
@@ -76,4 +100,4 @@ button:focus-visible {
   button {
     background-color: #f9f9f9;
   }
-}
+}*/

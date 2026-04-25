@@ -1,43 +1,41 @@
-import { StrictMode, useEffect, useRef, useState } from 'react'
-// import { createRoot } from 'react-dom/client'
-import PipApp from '../pip/App.tsx'
-import Icon from '@/assets/bootstrap/music-note-list.svg?react'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { useEffect, useRef, useState } from 'react'
+import Pip from './Pip.tsx'
+// import Icon from '@/assets/bootstrap/music-note-list.svg?react'
 import './App.css'
-import { createRoot } from 'react-dom/client'
-import { StyleSheetManager } from 'styled-components'
 
-declare global {
-  interface DocumentPictureInPicture {
-    requestWindow: (options?: any) => Promise<Window>
-  }
+// declare global {
+//   interface DocumentPictureInPicture {
+//     requestWindow: (options?: any) => Promise<Window>
+//   }
 
-  var documentPictureInPicture: DocumentPictureInPicture
-}
+//   var documentPictureInPicture: DocumentPictureInPicture
+// }
 
 interface Position {
   x: number
   y: number
 }
 
-async function openPipWindow() {
-  const win = await documentPictureInPicture.requestWindow({
-    width: 600,  // TODO: storage
-    height: 300,
-  })
-  createRoot(win.document.body).render(
-    <StrictMode>
-      <StyleSheetManager target={win.document.head}>
-        <PipApp />
-      </StyleSheetManager>
-    </StrictMode>,
-  )
-  return win
-}
+// async function openPipWindow() {
+//   const win = await documentPictureInPicture.requestWindow({
+//     width: 600,  // TODO: storage
+//     height: 300,
+//   })
+//   createRoot(win.document.body).render(
+//     <StrictMode>
+//       <Pip/>
+//     </StrictMode>,
+//   )
+//   return win
+// }
 
 export default function App() {
   const [translate, setTranslate] = useState<Position>({ x: 0, y: 0 })
   const translateOffset = useRef<Position | null>(null)
   const isDragging = useRef(false)
+
+  const [isActive, setIsActive] = useState(false)
   const [pipWindow, setPipWindow] = useState<Window | null>(null)
 
   // const captureRef = useRef<HTMLDivElement | null>(null)
@@ -84,15 +82,24 @@ export default function App() {
     }
   }
 
-  useEffect(() => {
-    document.addEventListener('mousemove', onMouseMove)
-    document.addEventListener('mouseup', onMouseUp)
+  // useEffect(() => {
+  //   (async () => {
+  //     if (restrictionTarget.current) {
+  //       return
+  //     }
+  //     const captureTarget = document.querySelector("#lyrics-display > div")
+  //     restrictionTarget.current = await RestrictionTarget.fromElement(captureTarget)
+  //   })()
+  // })
 
-    return () => {
-      document.removeEventListener('mousemove', onMouseMove)
-      document.removeEventListener('mouseup', onMouseUp)
-    }
-  })
+  // useEffect(() => {
+  //   if (!track.current || !restrictionTarget.current) {
+  //       return
+  //     }
+  //   track.current.restrictTo(isActive ? restrictionTarget.current : null)
+  // }, [isActive])
+
+
 
   // useEffect(() => {
   //   startCapture()
@@ -127,16 +134,66 @@ export default function App() {
   //   })()
   // })
 
+  // useEffect(() => {
+  //   (async () => {
+  //     if (track.current) {
+  //       return
+  //     }
+  //     const { streamId } = await chrome.runtime.sendMessage({
+  //       type: "GET_STREAM_ID",
+  //     })
+  //     console.log("streamId:", streamId)
+  //     const stream = await navigator.mediaDevices.getUserMedia({
+  //       video: {
+  //         mandatory: {
+  //           chromeMediaSource: "tab",
+  //           chromeMediaSourceId: streamId,
+  //         },
+  //       } as any,
+  //     })
+  //     track.current = stream.getVideoTracks()[0]
+  //     const captureTarget = document.querySelector("#lyrics-display > div")
+  //     const restrictionTarget = await RestrictionTarget.fromElement(captureTarget)
+  //     console.log("track:", track.current)
+  //     track.current.restrictTo(restrictionTarget)
+  //     // await track.current.restrictTo(null)
+  //   })()
+  // })
+
   return (
-    <button
-      id='lyrics-display'
-      style={{
-        '--translateX': `${translate.x}px`,
-        '--translateY': `${translate.y}px`,
-      } as React.CSSProperties}
-      onMouseDown={onMouseDown}
-    >
-      <Icon />
-    </button>
+    <>
+      <button
+        id='lyrics-display-toggle-button'
+        style={{
+          '--translateX': `${translate.x}px`,
+          '--translateY': `${translate.y}px`,
+        } as React.CSSProperties}
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={onMouseUp}
+      >
+        <FontAwesomeIcon icon={['fas', 'music']}/>
+      </button>
+
+      <div id='lyrics-display-controls'>
+        <Controls/>
+      </div>
+
+      <div id='lyrics-display-pip'>
+        <Pip/>
+      </div>
+
+      {/*<video
+        style={{
+          position: 'absolute',
+          top: '200px',
+          left: '200px',
+          width: '800px',
+          height: '600px',
+          zIndex: '999',
+          backgroundColor: 'lightcyan'
+        }}
+      ></video>*/}
+    </>
   )
 }

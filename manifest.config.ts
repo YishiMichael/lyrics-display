@@ -15,11 +15,18 @@ export default defineManifest({
     default_popup: 'src/popup/index.html',
   },
   permissions: [
-    'sidePanel',
+    'activeTab',
+    'tabCapture',
     'contentSettings',
+  ],
+  host_permissions: [
+    'https://www.bilibili.com/*'
   ],
   content_scripts: [{
     js: ['src/content/main.tsx'],
     matches: ['https://www.bilibili.com/*'],
   }],
+  background: {
+    service_worker: 'src/background.ts',
+  },
 })

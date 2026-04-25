@@ -1,8 +1,10 @@
-button#lyrics-display {
+#lyrics-display-toggle-button {
   display: flex;
   position: fixed;
-  top: 200px;
-  right: 100px;
+  /*top: 200px;*/
+  /*right: 100px;*/
+  top: 100px;
+  left: 100px;
   transform: translate(var(--translateX, 0px), var(--translateY, 0px));
   border-radius: 100%;
   border: none;
@@ -14,4 +16,9 @@ button#lyrics-display {
   color: white;
   cursor: pointer;
   z-index: 1;
+}
+
+#lyrics-display-pip {
+  isolation: isolate;
+  transform-style: flat;
 }

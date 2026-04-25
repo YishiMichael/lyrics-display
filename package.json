@@ -9,9 +9,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fortawesome/fontawesome-svg-core": "^7.2.0",
+    "@fortawesome/free-brands-svg-icons": "^7.2.0",
+    "@fortawesome/free-regular-svg-icons": "^7.2.0",
+    "@fortawesome/free-solid-svg-icons": "^7.2.0",
+    "@fortawesome/react-fontawesome": "^3.3.1",
     "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "vite-plugin-svgr": "^5.2.0"
+    "react-dom": "^19.2.4"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.4.0",

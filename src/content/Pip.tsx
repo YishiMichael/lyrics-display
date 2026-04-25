@@ -1,8 +1,8 @@
-import './App.css'
+import './Pip.css'
 
-export default function App() {
+export default function Pip() {
   return (
-    <div className='pip'>
+    <div className='body'>
       <div className='lyrics'>世界中のすべての人間に</div>
     </div>
   )

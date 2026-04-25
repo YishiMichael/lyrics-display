@@ -1,4 +1,34 @@
-#root {
+.root {
+  margin: 20px;
+}
+
+.power {
+  display: flex;
+  justify-content: center;
+}
+
+.power-btn {
+  align-self: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  appearance: none;
+  cursor: pointer;
+  color: var(--ld-inactive-color);
+  box-shadow: 0 0 10px var(--ld-inactive-color);
+  background: var(--ld-background);
+}
+
+.power-btn.active {
+  color: var(--ld-theme-color);
+  box-shadow: 0 0 10px var(--ld-theme-color);
+  background: radial-gradient(color-mix(var(--ld-theme-color) 25%, transparent), transparent 50%, transparent);
+}
+
+/*#root {
   max-width: 1280px;
   margin: 0 auto;
   padding: 2rem;
@@ -42,4 +72,4 @@
 
 .read-the-docs {
   color: #888;
-}
+}*/

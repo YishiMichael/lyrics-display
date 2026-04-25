@@ -7,6 +7,6 @@ container.id = 'crxjs-app'
 document.body.appendChild(container)
 createRoot(container).render(
   <StrictMode>
-    <App />
+    <App/>
   </StrictMode>,
 )
