@@ -1,4 +1,4 @@
-#lyrics-display {
+.root {
   --ld-theme-color: #39c5bb;
   --ld-inactive-color: #666;
   --ld-background-color: #1e1e1e;

@@ -1,97 +1,45 @@
 import React from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import Settings from './Settings'
-import './Panel.css'
+import styles from './Panel.module.css'
 
-interface Position {
-  x: number
-  y: number
+interface Attrs {
+  ref: React.RefObject<HTMLDivElement | null>
+  translate: { x: number, y: number }
+  onMouseDown: (event: React.MouseEvent) => void
+  onMouseUpToggleButton: () => void
+  onMouseUpSettingsButton: () => void
+  // isSettingsVisible: boolean
+  // setIsSettingsVisible: React.Dispatch<React.SetStateAction<boolean>>
 }
 
-// interface PanelAttrs {
-//   isSettingsVisible: boolean
-//   setIsSettingsVisible: React.Dispatch<React.SetStateAction<boolean>>
-// }
-
-export default function Panel() {
-  // const onClickToggle
-  const [isSettingsVisible, setIsSettingsVisible] = React.useState(false)
-
-  const translateOffset = React.useRef<Position | null>(null)
-  const [translate, setTranslate] = React.useState<Position>({ x: 0, y: 0 })
-  const [isDragging, setIsDragging] = React.useState(false)
-
-  const onMouseDown = (event: any) => {
-    setIsDragging(false)
-    translateOffset.current = {
-      x: translate.x - event.clientX,
-      y: translate.y - event.clientY,
-    }
-  }
-
-  const onMouseMove = (event: any) => {
-    if (translateOffset.current === null) {
-      return
-    }
-    setIsDragging(true)
-    setTranslate({
-      x: event.clientX + translateOffset.current.x,
-      y: event.clientY + translateOffset.current.y,
-    })
-  }
-
-  const onMouseUp = async () => {
-    setIsDragging(false)
-    translateOffset.current = null
-  }
-
-  React.useEffect(() => {
-    document.addEventListener('mousemove', onMouseMove)
-    document.addEventListener('mouseup', onMouseUp)
-
-    return () => {
-      document.removeEventListener('mousemove', onMouseMove)
-      document.removeEventListener('mouseup', onMouseUp)
-    }
-  })
-
-  const clickSettings = () => {
-    if (isDragging) {
-      return
-    }
-    setIsSettingsVisible((visible) => !visible)
-  }
-
+export default function Panel(attrs: Attrs) {
   return (
     <div
-      className='panel'
+      ref={attrs.ref}
+      className={styles.panel}
+      onMouseDown={attrs.onMouseDown}
       style={{
-        '--translateX': `${translate.x}px`,
-        '--translateY': `${translate.y}px`,
+        '--translateX': `${attrs.translate.x}px`,
+        '--translateY': `${attrs.translate.y}px`,
       } as React.CSSProperties}
     >
       <div
-        className={`panel-buttons ${isDragging ? 'dragging' : ''}`}
-        onMouseDown={onMouseDown}
+        className={styles.toggleButton}
+        onMouseUp={attrs.onMouseUpToggleButton}
       >
-        <div
-          className='toggle-button'
-        >
-          <FontAwesomeIcon icon={['fas', 'music']} size='xl'/>
-        </div>
-        <div
-          className='settings-button'
-          onMouseUp={clickSettings}
-        >
-          <FontAwesomeIcon icon={['fas', 'gear']} size='xl'/>
-        </div>
-        <div
-          className='panel-drag'
-        >
-          <FontAwesomeIcon icon={['fas', 'grip-vertical']}/>
-        </div>
+        <FontAwesomeIcon icon={['fas', 'music']} size='xl'/>
       </div>
-      {isSettingsVisible && <Settings/>}
+      <div
+        className={styles.settingsButton}
+        onMouseUp={attrs.onMouseUpSettingsButton}
+      >
+        <FontAwesomeIcon icon={['fas', 'gear']} size='xl'/>
+      </div>
+      <div
+        className={styles.panelDrag}
+      >
+        <FontAwesomeIcon icon={['fas', 'grip-vertical']}/>
+      </div>
     </div>
   )
 }

@@ -1,0 +1,68 @@
+.panel {
+  position: fixed;
+  z-index: 99999;
+  top: 0;
+  left: 0;
+  transform: translate(var(--translateX, 0), var(--translateY, 0));
+  will-change: transform;
+  /*color: white;*/
+
+  display: inline-grid;
+  grid: 32px / auto-flow dense min-content;
+  border-radius: 32px;
+  gap: 5px;
+  place-items: center;
+  padding: 4px;
+  background: var(--ld-background-color);
+  border: 1px var(--ld-inactive-color) solid;
+}
+
+.toggleButton {
+  width: 32px;
+  height: 32px;
+  border-radius: 16px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: var(--ld-inactive-color);
+  box-shadow: 0 0 6px var(--ld-inactive-color);
+  background: var(--ld-background-color);
+  cursor: pointer;
+
+  &.active {
+    color: var(--ld-theme-color);
+    box-shadow: 0 0 6px var(--ld-theme-color);
+    background: radial-gradient(color-mix(var(--ld-theme-color) 25%, transparent), transparent 50%, transparent);
+  }
+
+  & > svg {
+    transition: transform 0.25s ease;
+  }
+
+  & > svg:hover {
+    transform: scale(1.2);
+  }
+}
+
+.settingsButton {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: var(--ld-text-color);
+  cursor: pointer;
+
+  & > svg {
+    transition: transform 0.25s ease;
+  }
+
+  & > svg:hover {
+    transform: rotate(30deg);
+  }
+}
+
+.panelDrag {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: var(--ld-inactive-color);
+}
