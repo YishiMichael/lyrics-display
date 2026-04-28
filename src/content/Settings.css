@@ -1,0 +1,8 @@
+#lyrics-display .settings {
+  margin: 20px;
+  padding: 0;
+  min-width: 300px;
+  min-height: 500px;
+  background-color: var(--ld-background-color);
+  color: var(--ld-text-color);
+}

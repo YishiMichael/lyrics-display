@@ -1,24 +1,13 @@
-#lyrics-display-toggle-button {
-  display: flex;
-  position: fixed;
-  /*top: 200px;*/
-  /*right: 100px;*/
-  top: 100px;
-  left: 100px;
-  transform: translate(var(--translateX, 0px), var(--translateY, 0px));
-  border-radius: 100%;
-  border: none;
-  width: 36px;
-  height: 36px;
-  justify-content: center;
-  align-items: center;
-  background-color: #fb7299;
-  color: white;
-  cursor: pointer;
-  z-index: 1;
-}
+#lyrics-display {
+  --ld-theme-color: #39c5bb;
+  --ld-inactive-color: #666;
+  --ld-background-color: #1e1e1e;
+  --ld-text-color: white;
 
-#lyrics-display-pip {
-  isolation: isolate;
-  transform-style: flat;
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
 }

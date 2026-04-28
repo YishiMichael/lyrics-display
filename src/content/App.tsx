@@ -1,5 +1,5 @@
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { useEffect, useRef, useState } from 'react'
+import React from 'react'
+import Panel from './Panel.tsx'
 import Pip from './Pip.tsx'
 // import Icon from '@/assets/bootstrap/music-note-list.svg?react'
 import './App.css'
@@ -11,11 +11,6 @@ import './App.css'
 
 //   var documentPictureInPicture: DocumentPictureInPicture
 // }
-
-interface Position {
-  x: number
-  y: number
-}
 
 // async function openPipWindow() {
 //   const win = await documentPictureInPicture.requestWindow({
@@ -31,56 +26,14 @@ interface Position {
 // }
 
 export default function App() {
-  const [translate, setTranslate] = useState<Position>({ x: 0, y: 0 })
-  const translateOffset = useRef<Position | null>(null)
-  const isDragging = useRef(false)
 
-  const [isActive, setIsActive] = useState(false)
-  const [pipWindow, setPipWindow] = useState<Window | null>(null)
+  // const [isActive, setIsActive] = useState(false)
+  // const [pipWindow, setPipWindow] = useState<Window | null>(null)
 
   // const captureRef = useRef<HTMLDivElement | null>(null)
   // const videoRef = useRef<HTMLVideoElement | null>(null)
   // const [stream, setStream] = useState<MediaStream | null>(null)
 
-  const onMouseDown = (event: any) => {
-    translateOffset.current = {
-      x: translate.x - event.clientX,
-      y: translate.y - event.clientY,
-    }
-    isDragging.current = false
-  }
-
-  const onMouseMove = (event: any) => {
-    if (translateOffset.current === null) {
-      return
-    }
-    setTranslate({
-      x: event.clientX + translateOffset.current.x,
-      y: event.clientY + translateOffset.current.y,
-    })
-    isDragging.current = true
-  }
-
-  const onMouseUp = async () => {
-    if (translateOffset.current === null) {
-      return
-    }
-    translateOffset.current = null
-    if (isDragging.current) {
-      return
-    }
-
-    if (!pipWindow) {
-      const newPipWindow = await openPipWindow()
-      setPipWindow(newPipWindow)
-      newPipWindow.addEventListener('pagehide', () => {
-        setPipWindow(null)
-      })
-    } else {
-      pipWindow.close()
-      setPipWindow(null)
-    }
-  }
 
   // useEffect(() => {
   //   (async () => {
@@ -96,7 +49,7 @@ export default function App() {
   //   if (!track.current || !restrictionTarget.current) {
   //       return
   //     }
-  //   track.current.restrictTo(isActive ? restrictionTarget.current : null)
+  //   track.current.restrictTo(isActive && restrictionTarget.current)
   // }, [isActive])
 
 
@@ -161,27 +114,9 @@ export default function App() {
   // })
 
   return (
-    <>
-      <button
-        id='lyrics-display-toggle-button'
-        style={{
-          '--translateX': `${translate.x}px`,
-          '--translateY': `${translate.y}px`,
-        } as React.CSSProperties}
-        onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-        onMouseUp={onMouseUp}
-      >
-        <FontAwesomeIcon icon={['fas', 'music']}/>
-      </button>
-
-      <div id='lyrics-display-controls'>
-        <Controls/>
-      </div>
-
-      <div id='lyrics-display-pip'>
-        <Pip/>
-      </div>
+    <div id='lyrics-display'>
+      <Panel/>
+      <Pip/>
 
       {/*<video
         style={{
@@ -194,6 +129,6 @@ export default function App() {
           backgroundColor: 'lightcyan'
         }}
       ></video>*/}
-    </>
+    </div>
   )
 }

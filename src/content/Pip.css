@@ -1,21 +1,21 @@
-#lyrics-display-pip .body {
+#lyrics-display .pip {
+  isolation: isolate;
+  transform-style: flat;
   margin: 0;
   padding: 0;
-  user-select: none;
   background: #333;
   overflow: hidden;
   font-family: 'LXGW WenKai';
   text-wrap: nowrap;
-  user-select: none;
-}
 
-#lyrics-display-pip .lyrics {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  width: 100vw;
-  height: 100vh;
-  font-size: 30px;
-  color: #39c5bb;
-  text-shadow: 0px 0px 3px black;
+  & .lyrics {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100vw;
+    height: 100vh;
+    font-size: 30px;
+    color: #39c5bb;
+    text-shadow: 0px 0px 3px black;
+  }
 }
