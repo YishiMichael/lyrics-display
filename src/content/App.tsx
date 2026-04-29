@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React from 'react'
 import Panel from './Panel.tsx'
 import Pip from './Pip.tsx'
 import Settings from './Settings.tsx'
@@ -26,26 +26,32 @@ import styles from './App.module.css'
 //   return win
 // }
 
+interface AbsolutePosition {
+  xBuff: number
+  yBuff: number
+  xReverse: boolean
+  yReverse: boolean
+}
+
 function useWindowSize() {
-  const viewport = window.visualViewport!
   const [size, setSize] = React.useState({
-    width: viewport.width,
-    height: viewport.height,
+    width: Math.trunc(document.documentElement.clientWidth),
+    height: Math.trunc(document.documentElement.clientHeight),
   })
 
   React.useEffect(() => {
     const handleResize = () => {
       requestAnimationFrame(() => setSize({
-        width: viewport.width,
-        height: viewport.height,
+        width: Math.trunc(document.documentElement.clientWidth),
+        height: Math.trunc(document.documentElement.clientHeight),
       }))
     }
 
-    viewport.addEventListener('resize', handleResize)
+    window.addEventListener('resize', handleResize)
     return () => {
-      viewport.removeEventListener('resize', handleResize)
+      window.removeEventListener('resize', handleResize)
     }
-  })
+  }, [])
 
   return size
 }
@@ -61,8 +67,8 @@ function useElementSize<T extends HTMLElement>() {
 
     const rect = ref.current.getBoundingClientRect()
     setSize({
-      width: rect.width,
-      height: rect.height,
+      width: Math.trunc(rect.width),
+      height: Math.trunc(rect.height),
     })
   }, [])
 
@@ -158,70 +164,72 @@ export default function App() {
   // })
 
 
-  // const ononMouseUpToggle
   const windowSize = useWindowSize()
   const [panelSize, panelRef] = useElementSize<HTMLDivElement>()
 
-  const [panelPosAbs, setPanelPosAbs] = React.useState({ x: 0, y: 0 })
-  const [panelPosRel, setPanelPosRel] = React.useState({ x: 0.04, y: 0.1 })
+  const [panelAbsPos, setPanelAbsPos] = React.useState<AbsolutePosition>({
+    xBuff: 100,
+    yBuff: 100,
+    xReverse: false,
+    yReverse: false,
+  })
 
-  const clamp = (num: number, min: number, max: number) => Math.min(Math.max(num, min), max)
-
-  const setPanelPosByAbs = (
-    posAbs: { x: number, y: number },
+  const updatePanelAbsPos = (
+    panelAbsPos: AbsolutePosition,
     windowSize: { width: number, height: number },
     panelSize: { width: number, height: number },
   ) => {
-    posAbs.x = clamp(posAbs.x, 0, windowSize.width - panelSize.width)
-    posAbs.y = clamp(posAbs.y, 0, windowSize.height - panelSize.height)
-    setPanelPosAbs(posAbs)
-    setPanelPosRel({
-      x: posAbs.x / (windowSize.width - panelSize.width),
-      y: posAbs.y / (windowSize.height - panelSize.height),
+    const width = Math.max(windowSize.width - panelSize.width, 0)
+    const height = Math.max(windowSize.height - panelSize.height, 0)
+    const xBuff = Math.min(Math.max(panelAbsPos.xBuff, 0), width)
+    const yBuff = Math.min(Math.max(panelAbsPos.yBuff, 0), height)
+    const xRevert = 2 * xBuff > width
+    const yRevert = 2 * yBuff > height
+    setPanelAbsPos({
+      xBuff: xRevert ? width - xBuff : xBuff,
+      yBuff: yRevert ? height - yBuff : yBuff,
+      xReverse: panelAbsPos.xReverse !== xRevert,
+      yReverse: panelAbsPos.yReverse !== yRevert,
     })
   }
 
-  const setPanelPosByRel = (
-    posRel: { x: number, y: number },
-    windowSize: { width: number, height: number },
-    panelSize: { width: number, height: number },
-  ) => {
-    setPanelPosByAbs({
-      x: Math.trunc(posRel.x * (windowSize.width - panelSize.width)),
-      y: Math.trunc(posRel.y * (windowSize.height - panelSize.height)),
-    }, windowSize, panelSize)
-  }
-
-  useEffect(() => {
-    setPanelPosByRel(panelPosRel, windowSize, panelSize)
+  React.useEffect(() => {
+    updatePanelAbsPos(panelAbsPos, windowSize, panelSize)
   }, [windowSize, panelSize])
 
   const isDragging = React.useRef(false)
-  const dragOffset = React.useRef<{ x: number, y: number } | null>(null)
-  // const [translate, setTranslate] = React.useState({ x: 0, y: 0 })
+  const dragInitial = React.useRef<{ panelAbsPos: AbsolutePosition, clientX: number, clientY: number } | null>(null)
 
   const onMouseDown = (event: any) => {
     isDragging.current = false
-    dragOffset.current = {
-      x: panelPosAbs.x - event.clientX,
-      y: panelPosAbs.y - event.clientY,
+    dragInitial.current = {
+      panelAbsPos,
+      clientX: event.clientX,
+      clientY: event.clientY,
     }
   }
 
   const onMouseMove = (event: any) => {
-    if (dragOffset.current === null) {
+    if (dragInitial.current === null) {
       return
     }
     isDragging.current = true
-    setPanelPosByAbs({
-      x: event.clientX + dragOffset.current.x,
-      y: event.clientY + dragOffset.current.y,
+    const clientDiff = {
+      x: event.clientX - dragInitial.current.clientX,
+      y: event.clientY - dragInitial.current.clientY,
+    }
+    const panelAbsPos = dragInitial.current.panelAbsPos
+    updatePanelAbsPos({
+      xBuff: panelAbsPos.xReverse ? panelAbsPos.xBuff - clientDiff.x : panelAbsPos.xBuff + clientDiff.x,
+      yBuff: panelAbsPos.yReverse ? panelAbsPos.yBuff - clientDiff.y : panelAbsPos.yBuff + clientDiff.y,
+      xReverse: panelAbsPos.xReverse,
+      yReverse: panelAbsPos.yReverse,
     }, windowSize, panelSize)
   }
 
   const onMouseUp = () => {
     isDragging.current = false
-    dragOffset.current = null
+    dragInitial.current = null
   }
 
   React.useEffect(() => {
@@ -232,36 +240,48 @@ export default function App() {
       document.removeEventListener('mousemove', onMouseMove)
       document.removeEventListener('mouseup', onMouseUp)
     }
-  })
+  }, [windowSize, panelSize])
+
+  const [toggleButtonActive, setToggleButtonActive] = React.useState(false)
+  const [settingsHidden, setSettingsHidden] = React.useState(true)
 
   const onMouseUpToggleButton = () => {
     if (isDragging.current) {
       return
     }
-
+    setToggleButtonActive((toggleButtonActive) => !toggleButtonActive)
   }
 
   const onMouseUpSettingsButton = () => {
     if (isDragging.current) {
       return
     }
-    setIsSettingsVisible((visible) => !visible)
+    setSettingsHidden((settingsHidden) => !settingsHidden)
   }
-
-  const [isSettingsVisible, setIsSettingsVisible] = React.useState(false)
 
   return (
     <div className={styles.root}>
-      <Panel
-        ref={panelRef}
-        translate={panelPosAbs}
-        onMouseDown={onMouseDown}
-        onMouseUpToggleButton={onMouseUpToggleButton}
-        onMouseUpSettingsButton={onMouseUpSettingsButton}
-      />
-      <Settings
-        isSettingsVisible={isSettingsVisible}
-      />
+      <div
+        className={panelAbsPos.xReverse
+          ? (panelAbsPos.yReverse ? styles.contentSE : styles.contentNE)
+          : (panelAbsPos.yReverse ? styles.contentSW : styles.contentNW)
+        }
+        style={{
+          '--xBuff': `${panelAbsPos.xBuff}px`,
+          '--yBuff': `${panelAbsPos.yBuff}px`,
+        } as React.CSSProperties}
+      >
+        <Panel
+          ref={panelRef}
+          toggleButtonActive={toggleButtonActive}
+          onMouseDown={onMouseDown}
+          onMouseUpToggleButton={onMouseUpToggleButton}
+          onMouseUpSettingsButton={onMouseUpSettingsButton}
+        />
+        <Settings
+          settingsHidden={settingsHidden}
+        />
+      </div>
       <Pip/>
 
       {/*<video
