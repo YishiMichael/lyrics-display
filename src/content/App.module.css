@@ -16,13 +16,6 @@
   position: fixed;
   display: flex;
   z-index: 99999;
-  /*top: var(--top, unset);
-  right: var(--right, unset);
-  bottom: var(--bottom, unset);
-  left: var(--left, unset);*/
-  /*transform: translate(var(--translateX, 0), var(--translateY, 0));*/
-  /*will-change: transform;*/
-  /*color: white;*/
 }
 .north {
   top: var(--yBuff, 0);

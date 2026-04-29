@@ -1,30 +1,31 @@
 import React from 'react'
+import { createRoot } from 'react-dom/client'
 import Panel from './Panel.tsx'
 import Pip from './Pip.tsx'
 import Settings from './Settings.tsx'
-// import Icon from '@/assets/bootstrap/music-note-list.svg?react'
 import styles from './App.module.css'
 
-// declare global {
-//   interface DocumentPictureInPicture {
-//     requestWindow: (options?: any) => Promise<Window>
-//   }
+declare global {
+  interface DocumentPictureInPicture {
+    requestWindow: (options?: any) => Promise<Window>
+  }
 
-//   var documentPictureInPicture: DocumentPictureInPicture
-// }
+  var documentPictureInPicture: DocumentPictureInPicture
+}
 
-// async function openPipWindow() {
-//   const win = await documentPictureInPicture.requestWindow({
-//     width: 600,  // TODO: storage
-//     height: 300,
-//   })
-//   createRoot(win.document.body).render(
-//     <StrictMode>
-//       <Pip/>
-//     </StrictMode>,
-//   )
-//   return win
-// }
+async function openPipWindow(onClose: () => void) {
+  const win = await documentPictureInPicture.requestWindow({
+    width: 600,  // TODO: storage
+    height: 300,
+  })
+  win.addEventListener('unload', onClose)
+  createRoot(win.document.body).render(
+    <React.StrictMode>
+      <Pip/>
+    </React.StrictMode>,
+  )
+  return win
+}
 
 interface AbsolutePosition {
   xBuff: number
@@ -72,13 +73,97 @@ function useElementSize<T extends HTMLElement>() {
     })
   }, [])
 
-  return [size, ref] as const
+  return { size, ref }
+}
+
+function useDraggableElement<T extends HTMLElement>(initialAbsPos: AbsolutePosition) {
+  const windowSize = useWindowSize()
+  const { size: elementSize, ref } = useElementSize<T>()
+
+  const [absPos, setAbsPos] = React.useState<AbsolutePosition>(initialAbsPos)
+
+  const updateAbsPos = (
+    absPos: AbsolutePosition,
+    windowSize: { width: number, height: number },
+    elementSize: { width: number, height: number },
+  ) => {
+    const width = Math.max(windowSize.width - elementSize.width, 0)
+    const height = Math.max(windowSize.height - elementSize.height, 0)
+    const xBuff = Math.min(Math.max(absPos.xBuff, 0), width)
+    const yBuff = Math.min(Math.max(absPos.yBuff, 0), height)
+    const xRevert = 2 * xBuff > width
+    const yRevert = 2 * yBuff > height
+    setAbsPos({
+      xBuff: xRevert ? width - xBuff : xBuff,
+      yBuff: yRevert ? height - yBuff : yBuff,
+      xReverse: absPos.xReverse !== xRevert,
+      yReverse: absPos.yReverse !== yRevert,
+    })
+  }
+
+  React.useEffect(() => {
+    updateAbsPos(absPos, windowSize, elementSize)
+  }, [windowSize, elementSize])
+
+  const isDragging = React.useRef(false)
+  const dragInitial = React.useRef<{ absPos: AbsolutePosition, clientX: number, clientY: number } | null>(null)
+
+  const onMouseDown = (event: any) => {
+    isDragging.current = false
+    dragInitial.current = {
+      absPos,
+      clientX: event.clientX,
+      clientY: event.clientY,
+    }
+  }
+
+  const onMouseMove = (event: any) => {
+    if (dragInitial.current === null) {
+      return
+    }
+    isDragging.current = true
+    const clientDiff = {
+      x: event.clientX - dragInitial.current.clientX,
+      y: event.clientY - dragInitial.current.clientY,
+    }
+    const absPos = dragInitial.current.absPos
+    updateAbsPos({
+      xBuff: absPos.xReverse ? absPos.xBuff - clientDiff.x : absPos.xBuff + clientDiff.x,
+      yBuff: absPos.yReverse ? absPos.yBuff - clientDiff.y : absPos.yBuff + clientDiff.y,
+      xReverse: absPos.xReverse,
+      yReverse: absPos.yReverse,
+    }, windowSize, elementSize)
+  }
+
+  const onMouseUp = () => {
+    isDragging.current = false
+    dragInitial.current = null
+  }
+
+  React.useEffect(() => {
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [windowSize, elementSize])
+
+  const handleDrag = (callback: () => Promise<void>) => {
+    return async () => {
+      if (isDragging.current) {
+        return
+      }
+      await callback()
+    }
+  }
+
+  return { absPos, ref, handleDrag, onMouseDown }
 }
 
 export default function App() {
 
   // const [isActive, setIsActive] = useState(false)
-  // const [pipWindow, setPipWindow] = useState<Window | null>(null)
 
   // const captureRef = useRef<HTMLDivElement | null>(null)
   // const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -164,117 +249,54 @@ export default function App() {
   // })
 
 
-  const windowSize = useWindowSize()
-  const [panelSize, panelRef] = useElementSize<HTMLDivElement>()
-
-  const [panelAbsPos, setPanelAbsPos] = React.useState<AbsolutePosition>({
+  const {
+    absPos,
+    ref: panelRef,
+    handleDrag,
+    onMouseDown: onMouseDownDrag,
+  } = useDraggableElement<HTMLDivElement>({
     xBuff: 100,
     yBuff: 100,
     xReverse: false,
     yReverse: false,
-  })
+  })  // TODO: storage
 
-  const updatePanelAbsPos = (
-    panelAbsPos: AbsolutePosition,
-    windowSize: { width: number, height: number },
-    panelSize: { width: number, height: number },
-  ) => {
-    const width = Math.max(windowSize.width - panelSize.width, 0)
-    const height = Math.max(windowSize.height - panelSize.height, 0)
-    const xBuff = Math.min(Math.max(panelAbsPos.xBuff, 0), width)
-    const yBuff = Math.min(Math.max(panelAbsPos.yBuff, 0), height)
-    const xRevert = 2 * xBuff > width
-    const yRevert = 2 * yBuff > height
-    setPanelAbsPos({
-      xBuff: xRevert ? width - xBuff : xBuff,
-      yBuff: yRevert ? height - yBuff : yBuff,
-      xReverse: panelAbsPos.xReverse !== xRevert,
-      yReverse: panelAbsPos.yReverse !== yRevert,
-    })
-  }
-
-  React.useEffect(() => {
-    updatePanelAbsPos(panelAbsPos, windowSize, panelSize)
-  }, [windowSize, panelSize])
-
-  const isDragging = React.useRef(false)
-  const dragInitial = React.useRef<{ panelAbsPos: AbsolutePosition, clientX: number, clientY: number } | null>(null)
-
-  const onMouseDown = (event: any) => {
-    isDragging.current = false
-    dragInitial.current = {
-      panelAbsPos,
-      clientX: event.clientX,
-      clientY: event.clientY,
-    }
-  }
-
-  const onMouseMove = (event: any) => {
-    if (dragInitial.current === null) {
-      return
-    }
-    isDragging.current = true
-    const clientDiff = {
-      x: event.clientX - dragInitial.current.clientX,
-      y: event.clientY - dragInitial.current.clientY,
-    }
-    const panelAbsPos = dragInitial.current.panelAbsPos
-    updatePanelAbsPos({
-      xBuff: panelAbsPos.xReverse ? panelAbsPos.xBuff - clientDiff.x : panelAbsPos.xBuff + clientDiff.x,
-      yBuff: panelAbsPos.yReverse ? panelAbsPos.yBuff - clientDiff.y : panelAbsPos.yBuff + clientDiff.y,
-      xReverse: panelAbsPos.xReverse,
-      yReverse: panelAbsPos.yReverse,
-    }, windowSize, panelSize)
-  }
-
-  const onMouseUp = () => {
-    isDragging.current = false
-    dragInitial.current = null
-  }
-
-  React.useEffect(() => {
-    document.addEventListener('mousemove', onMouseMove)
-    document.addEventListener('mouseup', onMouseUp)
-
-    return () => {
-      document.removeEventListener('mousemove', onMouseMove)
-      document.removeEventListener('mouseup', onMouseUp)
-    }
-  }, [windowSize, panelSize])
-
-  const [toggleButtonActive, setToggleButtonActive] = React.useState(false)
+  const [pipWindow, setPipWindow] = React.useState<Window | null>(null)
   const [settingsHidden, setSettingsHidden] = React.useState(true)
 
-  const onMouseUpToggleButton = () => {
-    if (isDragging.current) {
-      return
+  const onMouseUpToggleButton = handleDrag(async () => {
+    if (pipWindow) {
+      if (!pipWindow.closed) {
+        pipWindow.close()
+      }
+      setPipWindow(null)
+    } else {
+      setPipWindow(await openPipWindow(() => {
+        setPipWindow(null)
+      }))
     }
-    setToggleButtonActive((toggleButtonActive) => !toggleButtonActive)
-  }
+  })
 
-  const onMouseUpSettingsButton = () => {
-    if (isDragging.current) {
-      return
-    }
+  const onMouseUpSettingsButton = handleDrag(async () => {
     setSettingsHidden((settingsHidden) => !settingsHidden)
-  }
+  })
 
   return (
     <div className={styles.root}>
       <div
-        className={panelAbsPos.xReverse
-          ? (panelAbsPos.yReverse ? styles.contentSE : styles.contentNE)
-          : (panelAbsPos.yReverse ? styles.contentSW : styles.contentNW)
+        className={absPos.xReverse
+          ? (absPos.yReverse ? styles.contentSE : styles.contentNE)
+          : (absPos.yReverse ? styles.contentSW : styles.contentNW)
         }
         style={{
-          '--xBuff': `${panelAbsPos.xBuff}px`,
-          '--yBuff': `${panelAbsPos.yBuff}px`,
+          '--xBuff': `${absPos.xBuff}px`,
+          '--yBuff': `${absPos.yBuff}px`,
         } as React.CSSProperties}
       >
         <Panel
           ref={panelRef}
-          toggleButtonActive={toggleButtonActive}
-          onMouseDown={onMouseDown}
+          toggleButtonActive={pipWindow !== null}
+          onMouseDown={onMouseDownDrag}
           onMouseUpToggleButton={onMouseUpToggleButton}
           onMouseUpSettingsButton={onMouseUpSettingsButton}
         />
@@ -282,19 +304,6 @@ export default function App() {
           settingsHidden={settingsHidden}
         />
       </div>
-      <Pip/>
-
-      {/*<video
-        style={{
-          position: 'absolute',
-          top: '200px',
-          left: '200px',
-          width: '800px',
-          height: '600px',
-          zIndex: '999',
-          backgroundColor: 'lightcyan'
-        }}
-      ></video>*/}
     </div>
   )
 }

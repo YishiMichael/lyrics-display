@@ -4,14 +4,14 @@
 
 // let pipTab = null
 
-chrome.runtime.onMessage.addListener((message) => {
-  if (message.type === 'action/power') {
-    chrome.runtime.sendMessage({
-      type: 'set/isActive',
-      isActive: message.isActive,
-    })
-  }
-})
+// chrome.runtime.onMessage.addListener((message) => {
+//   if (message.type === 'get/streamId') {
+//     chrome.runtime.sendMessage({
+//       type: 'set/isActive',
+//       isActive: message.isActive,
+//     })
+//   }
+// })
 
 // const streamIdMap = new Map<number, string>()
 
@@ -78,13 +78,18 @@ chrome.runtime.onMessage.addListener((message) => {
 //   }
 // });
 
-// chrome.runtime.onMessage.addListener(async (msg, _, sendResponse) => {
-//   switch (msg.type) {
-//   case 'GET_STREAM_ID':
-//     const streamId = await chrome.tabCapture.getMediaStreamId()
-//     sendResponse({
-//       streamId,
-//     })
-//     break
-//   }
+// chrome.action.onClicked.addListener((tab) => {
+//   chrome.scripting.executeScript({
+//     target: { tabId: tab.id! },
+//     files: ['src/content/main.tsx-loader.js'],
+//   })
 // })
+
+chrome.runtime.onMessage.addListener(async (msg, _, sendResponse) => {
+  switch (msg.type) {
+  case 'get/streamId':
+    const streamId = await chrome.tabCapture.getMediaStreamId()
+    sendResponse({ streamId })
+    break
+  }
+})
