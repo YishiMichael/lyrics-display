@@ -4,6 +4,7 @@ import Panel from './Panel.tsx'
 import Pip from './Pip.tsx'
 import Settings from './Settings.tsx'
 import styles from './App.module.css'
+import pipStyles from './Pip.module.css'
 
 declare global {
   interface DocumentPictureInPicture {
@@ -212,6 +213,7 @@ export default function App() {
   const mediaMonitor = React.useRef<MediaMonitor | null>(null)
 
   const [currentTime, setCurrentTime] = React.useState(0.0)
+  const pipVideoRef = React.useRef<HTMLVideoElement | null>(null)
 
   React.useEffect(() => {
     if (!video.current) {
@@ -241,27 +243,69 @@ export default function App() {
     }
   }, [])
 
+  React.useEffect(() => {
+    chrome.runtime.sendMessage('get/streamId', ({ streamId }) => {
+
+      // navigator.mediaDevices.getUserMedia({
+      //   video: {
+      //     mandatory: {
+      //       chromeMediaSource: 'tab',
+      //       chromeMediaSourceId: streamId,
+      //     },
+      //   } as any,
+      // })
+
+      navigator.mediaDevices.getDisplayMedia({
+        preferCurrentTab: true
+      })
+
+      .then(async (stream) => {
+        console.log('stream:', stream)
+        const track = stream.getVideoTracks()[0]
+        const captureTarget = document.getElementsByClassName(pipStyles.pip)[0]
+        const restrictionTarget = await RestrictionTarget.fromElement(captureTarget)
+        console.log('track:', track)
+        track.restrictTo(restrictionTarget)
+
+        pipVideoRef.current!.srcObject = stream
+        await pipVideoRef.current!.play()
+      })
+    })
+  }, [])
+
   return (
-    <div
-      className={absPos.xReverse
-        ? (absPos.yReverse ? styles.appSE : styles.appNE)
-        : (absPos.yReverse ? styles.appSW : styles.appNW)
-      }
-      style={{
-        '--xBuff': `${absPos.xBuff}px`,
-        '--yBuff': `${absPos.yBuff}px`,
-      } as React.CSSProperties}
-    >
-      <Panel
-        ref={panelRef}
-        toggleButtonActive={pipWindow !== null}
-        onMouseDownDrag={onMouseDownDrag}
-        onClickToggleButton={onClickToggleButton}
-        onClickSettingsButton={onClickSettingsButton}
-      />
-      <Settings
-        settingsVisible={settingsVisible}
-      />
+    <div className={styles.app}>
+      <div
+        className={absPos.xReverse
+          ? (absPos.yReverse ? styles.contentSE : styles.contentNE)
+          : (absPos.yReverse ? styles.contentSW : styles.contentNW)
+        }
+        style={{
+          '--xBuff': `${absPos.xBuff}px`,
+          '--yBuff': `${absPos.yBuff}px`,
+        } as React.CSSProperties}
+      >
+        <Panel
+          ref={panelRef}
+          toggleButtonActive={pipWindow !== null}
+          onMouseDownDrag={onMouseDownDrag}
+          onClickToggleButton={onClickToggleButton}
+          onClickSettingsButton={onClickSettingsButton}
+        />
+        <Settings
+          settingsVisible={settingsVisible}
+        />
+        <Pip/>
+      </div>
+      <video ref={pipVideoRef} style={{
+        position: 'absolute',
+        top: '200px',
+        left: '200px',
+        width: '400px',
+        height: '300px',
+        zIndex: '9999',
+        background: 'grey',
+      }}/>
     </div>
   )
 }

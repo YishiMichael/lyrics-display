@@ -1,12 +1,14 @@
-@media (display-mode: picture-in-picture) {
+/*@media (display-mode: picture-in-picture) {
   :global(body) {
     margin: 0;
     padding: 0;
     user-select: none;
   }
-}
+}*/
 
 .pip {
+  isolation: isolate;
+  transform-style: flat;
   background: #333;
   font-family: 'LXGW WenKai';
   text-wrap: nowrap;

@@ -108,9 +108,11 @@
 //   }
 // })
 
-// chrome.runtime.onMessage.addListener(async (message, _, sendResponse) => {
-//   if (message === 'get/streamId') {
-//     const streamId = await chrome.tabCapture.getMediaStreamId()
-//     sendResponse({ streamId })
-//   }
-// })
+chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
+  if (message === 'get/streamId') {
+    const streamId = await chrome.tabCapture.getMediaStreamId({
+      consumerTabId: sender.tab?.id,
+    })
+    sendResponse({ streamId })
+  }
+})

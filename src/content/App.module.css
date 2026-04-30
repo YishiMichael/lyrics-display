@@ -12,7 +12,9 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   user-select: none;
+}
 
+.content {
   position: fixed;
   display: flex;
   z-index: 99999;
@@ -33,15 +35,15 @@
   right: var(--xBuff, 0);
   align-items: flex-end;
 }
-.appNW {
-  composes: app north west;
+.contentNW {
+  composes: content north west;
 }
-.appNE {
-  composes: app north east;
+.contentNE {
+  composes: content north east;
 }
-.appSW {
-  composes: app south west;
+.contentSW {
+  composes: content south west;
 }
-.appSE {
-  composes: app south east;
+.contentSE {
+  composes: content south east;
 }
