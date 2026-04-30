@@ -85,11 +85,32 @@
 //   })
 // })
 
-chrome.runtime.onMessage.addListener(async (msg, _, sendResponse) => {
-  switch (msg.type) {
-  case 'get/streamId':
-    const streamId = await chrome.tabCapture.getMediaStreamId()
-    sendResponse({ streamId })
-    break
-  }
-})
+// chrome.commands.onCommand.addListener(async (command) => {
+//   switch (command) {
+//   case 'toggle_app':
+//     const [tab] = await chrome.tabs.query({
+//       active: true,
+//       currentWindow: true,
+//     })
+//     const tabId = tab?.id
+//     if (!tabId) {
+//       return
+//     }
+//     try {
+//       await chrome.tabs.sendMessage(tabId, {
+//         type: 'command/toggleApp',
+//         streamId: await chrome.tabCapture.getMediaStreamId(),
+//       })
+//     } catch (err) {
+//       console.warn('No receiver in tab', err)
+//     }
+//     return
+//   }
+// })
+
+// chrome.runtime.onMessage.addListener(async (message, _, sendResponse) => {
+//   if (message === 'get/streamId') {
+//     const streamId = await chrome.tabCapture.getMediaStreamId()
+//     sendResponse({ streamId })
+//   }
+// })

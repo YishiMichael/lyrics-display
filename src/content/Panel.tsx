@@ -5,9 +5,9 @@ import styles from './Panel.module.css'
 interface Attrs {
   ref: React.RefObject<HTMLDivElement | null>
   toggleButtonActive: boolean
-  onMouseDown: (event: React.MouseEvent) => void
-  onMouseUpToggleButton: () => void
-  onMouseUpSettingsButton: () => void
+  onMouseDownDrag: (event: React.MouseEvent) => void
+  onClickToggleButton: () => void
+  onClickSettingsButton: () => void
 }
 
 export default function Panel(attrs: Attrs) {
@@ -15,22 +15,22 @@ export default function Panel(attrs: Attrs) {
     <div
       ref={attrs.ref}
       className={styles.panel}
-      onMouseDown={attrs.onMouseDown}
     >
       <div
         className={attrs.toggleButtonActive ? styles.toggleButtonActive : styles.toggleButton}
-        onMouseUp={attrs.onMouseUpToggleButton}
+        onClick={attrs.onClickToggleButton}
       >
         <FontAwesomeIcon icon={['fas', 'music']} size='xl'/>
       </div>
       <div
         className={styles.settingsButton}
-        onMouseUp={attrs.onMouseUpSettingsButton}
+        onClick={attrs.onClickSettingsButton}
       >
         <FontAwesomeIcon icon={['fas', 'gear']} size='xl'/>
       </div>
       <div
         className={styles.panelDrag}
+        onMouseDown={attrs.onMouseDownDrag}
       >
         <FontAwesomeIcon icon={['fas', 'grip-vertical']}/>
       </div>

@@ -1,18 +1,18 @@
-.root {
+:root {
   --ld-theme-color: #39c5bb;
   --ld-inactive-color: #666;
   --ld-background-color: #1e1e1e;
   --ld-text-color: white;
+}
 
+.app {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   user-select: none;
-}
 
-.content {
   position: fixed;
   display: flex;
   z-index: 99999;
@@ -33,15 +33,15 @@
   right: var(--xBuff, 0);
   align-items: flex-end;
 }
-.contentNW {
-  composes: content north west;
+.appNW {
+  composes: app north west;
 }
-.contentNE {
-  composes: content north east;
+.appNE {
+  composes: app north east;
 }
-.contentSW {
-  composes: content south west;
+.appSW {
+  composes: app south west;
 }
-.contentSE {
-  composes: content south east;
+.appSE {
+  composes: app south east;
 }

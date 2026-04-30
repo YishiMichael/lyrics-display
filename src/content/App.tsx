@@ -13,12 +13,16 @@ declare global {
   var documentPictureInPicture: DocumentPictureInPicture
 }
 
-async function openPipWindow(onClose: () => void) {
+async function openPipWindow() {
   const win = await documentPictureInPicture.requestWindow({
     width: 600,  // TODO: storage
     height: 300,
   })
-  win.addEventListener('unload', onClose)
+  win.document.head.append(
+    ...Array.from(
+      document.querySelectorAll(`style[type='text/css'][data-vite-dev-id]`)
+    ).map((child) => child.cloneNode(true))
+  )
   createRoot(win.document.body).render(
     <React.StrictMode>
       <Pip/>
@@ -105,11 +109,9 @@ function useDraggableElement<T extends HTMLElement>(initialAbsPos: AbsolutePosit
     updateAbsPos(absPos, windowSize, elementSize)
   }, [windowSize, elementSize])
 
-  const isDragging = React.useRef(false)
   const dragInitial = React.useRef<{ absPos: AbsolutePosition, clientX: number, clientY: number } | null>(null)
 
   const onMouseDown = (event: any) => {
-    isDragging.current = false
     dragInitial.current = {
       absPos,
       clientX: event.clientX,
@@ -121,7 +123,6 @@ function useDraggableElement<T extends HTMLElement>(initialAbsPos: AbsolutePosit
     if (dragInitial.current === null) {
       return
     }
-    isDragging.current = true
     const clientDiff = {
       x: event.clientX - dragInitial.current.clientX,
       y: event.clientY - dragInitial.current.clientY,
@@ -136,7 +137,6 @@ function useDraggableElement<T extends HTMLElement>(initialAbsPos: AbsolutePosit
   }
 
   const onMouseUp = () => {
-    isDragging.current = false
     dragInitial.current = null
   }
 
@@ -149,110 +149,38 @@ function useDraggableElement<T extends HTMLElement>(initialAbsPos: AbsolutePosit
     }
   }, [windowSize, elementSize])
 
-  const handleDrag = (callback: () => Promise<void>) => {
-    return async () => {
-      if (isDragging.current) {
-        return
-      }
-      await callback()
-    }
+  return { absPos, ref, onMouseDown }
+}
+
+class MediaMonitor {
+  audioCtx: AudioContext
+  source: MediaElementAudioSourceNode
+  analyser: AnalyserNode
+  dataArray: Uint8Array<ArrayBuffer>
+
+  constructor(element: HTMLMediaElement, fftSize: number) {
+    this.audioCtx = new AudioContext()
+    this.source = this.audioCtx.createMediaElementSource(element)
+    this.analyser = this.audioCtx.createAnalyser()
+    this.analyser.fftSize = fftSize
+    this.source.connect(this.analyser)
+    this.analyser.connect(this.audioCtx.destination)
+    this.dataArray = new Uint8Array(this.analyser.frequencyBinCount)
   }
 
-  return { absPos, ref, handleDrag, onMouseDown }
+  getByteFrequencyData() {
+    this.analyser.getByteFrequencyData(this.dataArray)
+    return this.dataArray
+  }
 }
 
 export default function App() {
-
-  // const [isActive, setIsActive] = useState(false)
-
-  // const captureRef = useRef<HTMLDivElement | null>(null)
-  // const videoRef = useRef<HTMLVideoElement | null>(null)
-  // const [stream, setStream] = useState<MediaStream | null>(null)
-
-
-  // useEffect(() => {
-  //   (async () => {
-  //     if (restrictionTarget.current) {
-  //       return
-  //     }
-  //     const captureTarget = document.querySelector('#lyrics-display > div')
-  //     restrictionTarget.current = await RestrictionTarget.fromElement(captureTarget)
-  //   })()
-  // })
-
-  // useEffect(() => {
-  //   if (!track.current || !restrictionTarget.current) {
-  //       return
-  //     }
-  //   track.current.restrictTo(isActive && restrictionTarget.current)
-  // }, [isActive])
-
-
-
-  // useEffect(() => {
-  //   startCapture()
-  // })
-
-  // 4. Enter Picture-in-Picture
-  // const enterPiP = async () => {
-  //   const video = videoRef.current;
-  //   if (!video) return;
-
-  //   if (document.pictureInPictureElement) {
-  //     await document.exitPictureInPicture();
-  //     return;
-  //   }
-
-  //   await video.requestPictureInPicture();
-  // };
-
-  // useEffect(() => {
-  //   return (async () => {
-  //     const stream = await navigator.mediaDevices.getDisplayMedia()
-  //     const [track] = stream.getVideoTracks()
-  //     const captureTarget = document.querySelector('#lyrics-display #pip-body')
-  //     const restrictionTarget = await RestrictionTarget.fromElement(captureTarget)
-  //     await track.restrictTo(restrictionTarget)
-
-  //     return () => {
-  //       (async () => {
-  //         await track.restrictTo(null)
-  //       })()
-  //     }
-  //   })()
-  // })
-
-  // useEffect(() => {
-  //   (async () => {
-  //     if (track.current) {
-  //       return
-  //     }
-  //     const { streamId } = await chrome.runtime.sendMessage({
-  //       type: 'GET_STREAM_ID',
-  //     })
-  //     console.log('streamId:', streamId)
-  //     const stream = await navigator.mediaDevices.getUserMedia({
-  //       video: {
-  //         mandatory: {
-  //           chromeMediaSource: 'tab',
-  //           chromeMediaSourceId: streamId,
-  //         },
-  //       } as any,
-  //     })
-  //     track.current = stream.getVideoTracks()[0]
-  //     const captureTarget = document.querySelector('#lyrics-display > div')
-  //     const restrictionTarget = await RestrictionTarget.fromElement(captureTarget)
-  //     console.log('track:', track.current)
-  //     track.current.restrictTo(restrictionTarget)
-  //     // await track.current.restrictTo(null)
-  //   })()
-  // })
-
+  const [pipWindow, setPipWindow] = React.useState<Window | null>(null)
+  const [settingsVisible, setSettingsVisible] = React.useState(false)
 
   const {
     absPos,
     ref: panelRef,
-    handleDrag,
     onMouseDown: onMouseDownDrag,
   } = useDraggableElement<HTMLDivElement>({
     xBuff: 100,
@@ -261,49 +189,79 @@ export default function App() {
     yReverse: false,
   })  // TODO: storage
 
-  const [pipWindow, setPipWindow] = React.useState<Window | null>(null)
-  const [settingsHidden, setSettingsHidden] = React.useState(true)
-
-  const onMouseUpToggleButton = handleDrag(async () => {
+  const onClickToggleButton = () => {
     if (pipWindow) {
       if (!pipWindow.closed) {
         pipWindow.close()
       }
       setPipWindow(null)
     } else {
-      setPipWindow(await openPipWindow(() => {
-        setPipWindow(null)
-      }))
+      openPipWindow().then((pipWindow) => {
+        pipWindow.addEventListener('unload', () => setPipWindow(null))
+        setPipWindow(pipWindow)
+      })
     }
-  })
+  }
 
-  const onMouseUpSettingsButton = handleDrag(async () => {
-    setSettingsHidden((settingsHidden) => !settingsHidden)
-  })
+  const onClickSettingsButton = () => {
+    setSettingsVisible((settingsVisible) => !settingsVisible)
+  }
+
+  // const channel = React.useRef(new BroadcastChannel('ld-channel'))
+  const video = React.useRef<HTMLVideoElement | null>(null)
+  const mediaMonitor = React.useRef<MediaMonitor | null>(null)
+
+  const [currentTime, setCurrentTime] = React.useState(0.0)
+
+  React.useEffect(() => {
+    if (!video.current) {
+      const player = document.getElementById('bilibili-player')
+      if (player) {
+        video.current = player.getElementsByTagName('video').item(0)
+      }
+    }
+    if (!video.current) {
+      return
+    }
+    if (!mediaMonitor.current) {
+      mediaMonitor.current = new MediaMonitor(video.current, 64)
+    }
+    const interval = setInterval(() => {
+      if (video.current && mediaMonitor.current) {
+        setCurrentTime(video.current.currentTime)
+        // channel.current.postMessage({
+        //   type: 'update-instant',
+        //   currentTime: video.current.currentTime,
+        //   frequencyData: mediaMonitor.current.getByteFrequencyData(),
+        // })
+      }
+    }, 1000 / 30)
+    return () => {
+      clearInterval(interval)
+    }
+  }, [])
 
   return (
-    <div className={styles.root}>
-      <div
-        className={absPos.xReverse
-          ? (absPos.yReverse ? styles.contentSE : styles.contentNE)
-          : (absPos.yReverse ? styles.contentSW : styles.contentNW)
-        }
-        style={{
-          '--xBuff': `${absPos.xBuff}px`,
-          '--yBuff': `${absPos.yBuff}px`,
-        } as React.CSSProperties}
-      >
-        <Panel
-          ref={panelRef}
-          toggleButtonActive={pipWindow !== null}
-          onMouseDown={onMouseDownDrag}
-          onMouseUpToggleButton={onMouseUpToggleButton}
-          onMouseUpSettingsButton={onMouseUpSettingsButton}
-        />
-        <Settings
-          settingsHidden={settingsHidden}
-        />
-      </div>
+    <div
+      className={absPos.xReverse
+        ? (absPos.yReverse ? styles.appSE : styles.appNE)
+        : (absPos.yReverse ? styles.appSW : styles.appNW)
+      }
+      style={{
+        '--xBuff': `${absPos.xBuff}px`,
+        '--yBuff': `${absPos.yBuff}px`,
+      } as React.CSSProperties}
+    >
+      <Panel
+        ref={panelRef}
+        toggleButtonActive={pipWindow !== null}
+        onMouseDownDrag={onMouseDownDrag}
+        onClickToggleButton={onClickToggleButton}
+        onClickSettingsButton={onClickSettingsButton}
+      />
+      <Settings
+        settingsVisible={settingsVisible}
+      />
     </div>
   )
 }

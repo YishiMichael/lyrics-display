@@ -1,12 +1,12 @@
 import styles from './Settings.module.css'
 
 interface Attrs {
-  settingsHidden: boolean
+  settingsVisible: boolean
 }
 
 export default function Settings(attrs: Attrs) {
   return (
-    <div className={attrs.settingsHidden ? styles.settingsHidden : styles.settings}>
+    <div className={attrs.settingsVisible ? styles.settings : styles.settingsHidden}>
       <h1>Lyrics Display</h1>
     </div>
   )

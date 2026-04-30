@@ -1,12 +1,16 @@
+@media (display-mode: picture-in-picture) {
+  :global(body) {
+    margin: 0;
+    padding: 0;
+    user-select: none;
+  }
+}
+
 .pip {
-  isolation: isolate;
-  transform-style: flat;
-  margin: 0;
-  padding: 0;
   background: #333;
-  overflow: hidden;
   font-family: 'LXGW WenKai';
   text-wrap: nowrap;
+  overflow: hidden;
 }
 
 .lyrics {

@@ -3,16 +3,16 @@
   --ld-inactive-color: #666;
   --ld-background-color: #1e1e1e;
   --ld-text-color: white;
+}
 
+body {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   user-select: none;
-}
 
-body {
   margin: 0;
   padding: 0;
   min-width: 360px;
