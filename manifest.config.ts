@@ -14,10 +14,6 @@ export default defineManifest({
     },
     default_popup: 'src/popup/index.html',
   },
-  permissions: [
-    'activeTab',
-    'tabCapture',
-  ],
   host_permissions: [
     'https://www.bilibili.com/*'
   ],

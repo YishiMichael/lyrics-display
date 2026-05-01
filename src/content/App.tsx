@@ -4,7 +4,8 @@ import Panel from './Panel.tsx'
 import Pip from './Pip.tsx'
 import Settings from './Settings.tsx'
 import styles from './App.module.css'
-import pipStyles from './Pip.module.css'
+import Konva from 'konva'
+import { Layer, Stage, Text } from 'react-konva'
 
 declare global {
   interface DocumentPictureInPicture {
@@ -112,7 +113,7 @@ function useDraggableElement<T extends HTMLElement>(initialAbsPos: AbsolutePosit
 
   const dragInitial = React.useRef<{ absPos: AbsolutePosition, clientX: number, clientY: number } | null>(null)
 
-  const onMouseDown = (event: any) => {
+  const onMouseDownDrag = (event: React.MouseEvent) => {
     dragInitial.current = {
       absPos,
       clientX: event.clientX,
@@ -120,7 +121,7 @@ function useDraggableElement<T extends HTMLElement>(initialAbsPos: AbsolutePosit
     }
   }
 
-  const onMouseMove = (event: any) => {
+  const onMouseMove = (event: MouseEvent) => {
     if (dragInitial.current === null) {
       return
     }
@@ -150,7 +151,7 @@ function useDraggableElement<T extends HTMLElement>(initialAbsPos: AbsolutePosit
     }
   }, [windowSize, elementSize])
 
-  return { absPos, ref, onMouseDown }
+  return { absPos, ref, onMouseDownDrag }
 }
 
 class MediaMonitor {
@@ -179,11 +180,7 @@ export default function App() {
   const [pipWindow, setPipWindow] = React.useState<Window | null>(null)
   const [settingsVisible, setSettingsVisible] = React.useState(false)
 
-  const {
-    absPos,
-    ref: panelRef,
-    onMouseDown: onMouseDownDrag,
-  } = useDraggableElement<HTMLDivElement>({
+  const draggablePanel = useDraggableElement<HTMLDivElement>({
     xBuff: 100,
     yBuff: 100,
     xReverse: false,
@@ -213,6 +210,7 @@ export default function App() {
   const mediaMonitor = React.useRef<MediaMonitor | null>(null)
 
   const [currentTime, setCurrentTime] = React.useState(0.0)
+  const layerRef = React.useRef<Konva.Layer | null>(null)
   const pipVideoRef = React.useRef<HTMLVideoElement | null>(null)
 
   React.useEffect(() => {
@@ -228,14 +226,10 @@ export default function App() {
     if (!mediaMonitor.current) {
       mediaMonitor.current = new MediaMonitor(video.current, 64)
     }
+
     const interval = setInterval(() => {
-      if (video.current && mediaMonitor.current) {
+      if (video.current) {
         setCurrentTime(video.current.currentTime)
-        // channel.current.postMessage({
-        //   type: 'update-instant',
-        //   currentTime: video.current.currentTime,
-        //   frequencyData: mediaMonitor.current.getByteFrequencyData(),
-        // })
       }
     }, 1000 / 30)
     return () => {
@@ -243,69 +237,66 @@ export default function App() {
     }
   }, [])
 
+  const stream = React.useRef<MediaStream | null>(null)
   React.useEffect(() => {
-    chrome.runtime.sendMessage('get/streamId', ({ streamId }) => {
-
-      // navigator.mediaDevices.getUserMedia({
-      //   video: {
-      //     mandatory: {
-      //       chromeMediaSource: 'tab',
-      //       chromeMediaSourceId: streamId,
-      //     },
-      //   } as any,
-      // })
-
-      navigator.mediaDevices.getDisplayMedia({
-        preferCurrentTab: true
-      })
-
-      .then(async (stream) => {
-        console.log('stream:', stream)
-        const track = stream.getVideoTracks()[0]
-        const captureTarget = document.getElementsByClassName(pipStyles.pip)[0]
-        const restrictionTarget = await RestrictionTarget.fromElement(captureTarget)
-        console.log('track:', track)
-        track.restrictTo(restrictionTarget)
-
-        pipVideoRef.current!.srcObject = stream
-        await pipVideoRef.current!.play()
-      })
-    })
+    if (pipVideoRef.current && layerRef.current && !stream.current) {
+      const canvas = layerRef.current.getNativeCanvasElement()
+      stream.current = canvas.captureStream()
+      pipVideoRef.current.srcObject = stream.current
+      pipVideoRef.current.play()
+    }
   }, [])
 
   return (
     <div className={styles.app}>
       <div
-        className={absPos.xReverse
-          ? (absPos.yReverse ? styles.contentSE : styles.contentNE)
-          : (absPos.yReverse ? styles.contentSW : styles.contentNW)
+        className={draggablePanel.absPos.xReverse
+          ? (draggablePanel.absPos.yReverse ? styles.contentSE : styles.contentNE)
+          : (draggablePanel.absPos.yReverse ? styles.contentSW : styles.contentNW)
         }
         style={{
-          '--xBuff': `${absPos.xBuff}px`,
-          '--yBuff': `${absPos.yBuff}px`,
+          '--xBuff': `${draggablePanel.absPos.xBuff}px`,
+          '--yBuff': `${draggablePanel.absPos.yBuff}px`,
         } as React.CSSProperties}
       >
         <Panel
-          ref={panelRef}
+          ref={draggablePanel.ref}
           toggleButtonActive={pipWindow !== null}
-          onMouseDownDrag={onMouseDownDrag}
+          onMouseDownDrag={draggablePanel.onMouseDownDrag}
           onClickToggleButton={onClickToggleButton}
           onClickSettingsButton={onClickSettingsButton}
         />
         <Settings
           settingsVisible={settingsVisible}
         />
-        <Pip/>
       </div>
-      <video ref={pipVideoRef} style={{
-        position: 'absolute',
-        top: '200px',
-        left: '200px',
-        width: '400px',
-        height: '300px',
-        zIndex: '9999',
-        background: 'grey',
-      }}/>
+      <Pip/>
+      <Stage width={400} height={300}>
+        <Layer ref={layerRef}>
+          <Text
+            text={`${currentTime}`}
+            x={50}
+            y={150}
+            fontSize={40}
+            stroke="green"
+            fill="yellow"
+            strokeWidth={3}
+            fillAfterStrokeEnabled
+          />
+        </Layer>
+      </Stage>
+      <video
+        ref={pipVideoRef}
+        style={{
+          position: 'absolute',
+          top: '200px',
+          right: '200px',
+          width: '400px',
+          height: '300px',
+          zIndex: '9999',
+          background: 'grey',
+        }}
+      />
     </div>
   )
 }
