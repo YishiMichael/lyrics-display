@@ -1,37 +1,35 @@
 import React from 'react'
-import { createRoot } from 'react-dom/client'
+import Display from './Display.tsx'
 import Panel from './Panel.tsx'
 import Pip from './Pip.tsx'
 import Settings from './Settings.tsx'
 import styles from './App.module.css'
-import Konva from 'konva'
-import { Layer, Stage, Text } from 'react-konva'
 
-declare global {
-  interface DocumentPictureInPicture {
-    requestWindow: (options?: any) => Promise<Window>
-  }
+// declare global {
+//   interface DocumentPictureInPicture {
+//     requestWindow: (options?: any) => Promise<Window>
+//   }
 
-  var documentPictureInPicture: DocumentPictureInPicture
-}
+//   var documentPictureInPicture: DocumentPictureInPicture
+// }
 
-async function openPipWindow() {
-  const win = await documentPictureInPicture.requestWindow({
-    width: 600,  // TODO: storage
-    height: 300,
-  })
-  win.document.head.append(
-    ...Array.from(
-      document.querySelectorAll(`style[type='text/css'][data-vite-dev-id]`)
-    ).map((child) => child.cloneNode(true))
-  )
-  createRoot(win.document.body).render(
-    <React.StrictMode>
-      <Pip/>
-    </React.StrictMode>,
-  )
-  return win
-}
+// async function openPipWindow() {
+//   const win = await documentPictureInPicture.requestWindow({
+//     width: 600,  // TODO: storage
+//     height: 300,
+//   })
+//   win.document.head.append(
+//     ...Array.from(
+//       document.querySelectorAll(`style[type='text/css'][data-vite-dev-id]`)
+//     ).map((child) => child.cloneNode(true))
+//   )
+//   createRoot(win.document.body).render(
+//     <React.StrictMode>
+//       <Pip/>
+//     </React.StrictMode>,
+//   )
+//   return win
+// }
 
 interface AbsolutePosition {
   xBuff: number
@@ -177,8 +175,11 @@ class MediaMonitor {
 }
 
 export default function App() {
-  const [pipWindow, setPipWindow] = React.useState<Window | null>(null)
+  const [pipVisible, setPipVisible] = React.useState(false)
   const [settingsVisible, setSettingsVisible] = React.useState(false)
+
+  // const pipVideoRef = React.useRef<HTMLVideoElement | null>(null)
+  // const pipWindowRef = React.useRef<PictureInPictureWindow | null>(null)
 
   const draggablePanel = useDraggableElement<HTMLDivElement>({
     xBuff: 100,
@@ -187,31 +188,36 @@ export default function App() {
     yReverse: false,
   })  // TODO: storage
 
-  const onClickToggleButton = () => {
-    if (pipWindow) {
-      if (!pipWindow.closed) {
-        pipWindow.close()
-      }
-      setPipWindow(null)
-    } else {
-      openPipWindow().then((pipWindow) => {
-        pipWindow.addEventListener('unload', () => setPipWindow(null))
-        setPipWindow(pipWindow)
-      })
-    }
-  }
+  // const onClickToggleButton = () => {
+  //   if (pipWindowRef.current) {
+  //     // if (!pipWindowRef.current.closed) {
+  //     //   pipWindowRef.current.close()
+  //     // }
+  //     pipWindowRef.current = null
+  //   } else {
+  //     if (pipVideoRef.current) {
+  //       pipVideoRef.current.requestPictureInPicture().then(((pipWindow) => {
+  //         pipWindow.addEventListener('unload', () => {
+  //           pipWindowRef.current = null
+  //         })
+  //         pipWindowRef.current = pipWindow
+  //       }))
+  //     }
+  //   }
+  // }
 
-  const onClickSettingsButton = () => {
-    setSettingsVisible((settingsVisible) => !settingsVisible)
-  }
+  // React.useEffect(() => {
+  //   if (pipVisible) {
+  //     pipVideoRef.current
+  //   }
+  // }, [pipVisible])
 
   // const channel = React.useRef(new BroadcastChannel('ld-channel'))
   const video = React.useRef<HTMLVideoElement | null>(null)
   const mediaMonitor = React.useRef<MediaMonitor | null>(null)
 
   const [currentTime, setCurrentTime] = React.useState(0.0)
-  const layerRef = React.useRef<Konva.Layer | null>(null)
-  const pipVideoRef = React.useRef<HTMLVideoElement | null>(null)
+  // const layerRef = React.useRef<Konva.Layer | null>(null)
 
   React.useEffect(() => {
     if (!video.current) {
@@ -237,15 +243,15 @@ export default function App() {
     }
   }, [])
 
-  const stream = React.useRef<MediaStream | null>(null)
-  React.useEffect(() => {
-    if (pipVideoRef.current && layerRef.current && !stream.current) {
-      const canvas = layerRef.current.getNativeCanvasElement()
-      stream.current = canvas.captureStream()
-      pipVideoRef.current.srcObject = stream.current
-      pipVideoRef.current.play()
-    }
-  }, [])
+  // const stream = React.useRef<MediaStream | null>(null)
+  // React.useEffect(() => {
+  //   if (pipVideoRef.current && layerRef.current && !stream.current) {
+  //     const canvas = layerRef.current.getNativeCanvasElement()
+  //     stream.current = canvas.captureStream()
+  //     pipVideoRef.current.srcObject = stream.current
+  //     pipVideoRef.current.play()
+  //   }
+  // }, [])
 
   return (
     <div className={styles.app}>
@@ -261,42 +267,27 @@ export default function App() {
       >
         <Panel
           ref={draggablePanel.ref}
-          toggleButtonActive={pipWindow !== null}
+          pipVisible={pipVisible}
           onMouseDownDrag={draggablePanel.onMouseDownDrag}
-          onClickToggleButton={onClickToggleButton}
-          onClickSettingsButton={onClickSettingsButton}
+          onClickPipButton={() => {
+            setPipVisible((pipVisible) => !pipVisible)
+          }}
+          onClickSettingsButton={() => {
+            setSettingsVisible((settingsVisible) => !settingsVisible)
+          }}
         />
         <Settings
           settingsVisible={settingsVisible}
         />
       </div>
-      <Pip/>
-      <Stage width={400} height={300}>
-        <Layer ref={layerRef}>
-          <Text
-            text={`${currentTime}`}
-            x={50}
-            y={150}
-            fontSize={40}
-            stroke="green"
-            fill="yellow"
-            strokeWidth={3}
-            fillAfterStrokeEnabled
-          />
-        </Layer>
-      </Stage>
-      <video
-        ref={pipVideoRef}
-        style={{
-          position: 'absolute',
-          top: '200px',
-          right: '200px',
-          width: '400px',
-          height: '300px',
-          zIndex: '9999',
-          background: 'grey',
-        }}
-      />
+      <Pip
+        pipVisible={pipVisible}
+        setPipVisible={setPipVisible}
+      >
+        <Display
+          currentTime={currentTime}
+        />
+      </Pip>
     </div>
   )
 }

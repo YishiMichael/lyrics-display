@@ -4,9 +4,9 @@ import styles from './Panel.module.css'
 
 interface Attrs {
   ref: React.RefObject<HTMLDivElement | null>
-  toggleButtonActive: boolean
+  pipVisible: boolean
   onMouseDownDrag: (event: React.MouseEvent) => void
-  onClickToggleButton: () => void
+  onClickPipButton: () => void
   onClickSettingsButton: () => void
 }
 
@@ -17,8 +17,8 @@ export default function Panel(attrs: Attrs) {
       className={styles.panel}
     >
       <div
-        className={attrs.toggleButtonActive ? styles.toggleButtonActive : styles.toggleButton}
-        onClick={attrs.onClickToggleButton}
+        className={attrs.pipVisible ? styles.pipButtonActive : styles.pipButton}
+        onClick={attrs.onClickPipButton}
       >
         <FontAwesomeIcon icon={['fas', 'music']} size='xl'/>
       </div>

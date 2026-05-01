@@ -9,7 +9,7 @@
   border: 1px var(--ld-inactive-color) solid;
 }
 
-.toggleButton {
+.pipButton {
   width: 32px;
   height: 32px;
   border-radius: 16px;
@@ -27,8 +27,8 @@
     transform: scale(1.1);
   }
 }
-.toggleButtonActive {
-  composes: toggleButton;
+.pipButtonActive {
+  composes: pipButton;
   color: var(--ld-theme-color);
   box-shadow: 0 0 6px var(--ld-theme-color);
   background: radial-gradient(color-mix(var(--ld-theme-color) 25%, transparent), transparent 50%, transparent);
