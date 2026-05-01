@@ -1,35 +1,9 @@
 import React from 'react'
 import Display from './Display.tsx'
 import Panel from './Panel.tsx'
-import Pip from './Pip.tsx'
+import PipVideo from './PipVideo.tsx'
 import Settings from './Settings.tsx'
 import styles from './App.module.css'
-
-// declare global {
-//   interface DocumentPictureInPicture {
-//     requestWindow: (options?: any) => Promise<Window>
-//   }
-
-//   var documentPictureInPicture: DocumentPictureInPicture
-// }
-
-// async function openPipWindow() {
-//   const win = await documentPictureInPicture.requestWindow({
-//     width: 600,  // TODO: storage
-//     height: 300,
-//   })
-//   win.document.head.append(
-//     ...Array.from(
-//       document.querySelectorAll(`style[type='text/css'][data-vite-dev-id]`)
-//     ).map((child) => child.cloneNode(true))
-//   )
-//   createRoot(win.document.body).render(
-//     <React.StrictMode>
-//       <Pip/>
-//     </React.StrictMode>,
-//   )
-//   return win
-// }
 
 interface AbsolutePosition {
   xBuff: number
@@ -152,34 +126,10 @@ function useDraggableElement<T extends HTMLElement>(initialAbsPos: AbsolutePosit
   return { absPos, ref, onMouseDownDrag }
 }
 
-class MediaMonitor {
-  audioCtx: AudioContext
-  source: MediaElementAudioSourceNode
-  analyser: AnalyserNode
-  dataArray: Uint8Array<ArrayBuffer>
-
-  constructor(element: HTMLMediaElement, fftSize: number) {
-    this.audioCtx = new AudioContext()
-    this.source = this.audioCtx.createMediaElementSource(element)
-    this.analyser = this.audioCtx.createAnalyser()
-    this.analyser.fftSize = fftSize
-    this.source.connect(this.analyser)
-    this.analyser.connect(this.audioCtx.destination)
-    this.dataArray = new Uint8Array(this.analyser.frequencyBinCount)
-  }
-
-  getByteFrequencyData() {
-    this.analyser.getByteFrequencyData(this.dataArray)
-    return this.dataArray
-  }
-}
-
 export default function App() {
   const [pipVisible, setPipVisible] = React.useState(false)
   const [settingsVisible, setSettingsVisible] = React.useState(false)
-
-  // const pipVideoRef = React.useRef<HTMLVideoElement | null>(null)
-  // const pipWindowRef = React.useRef<PictureInPictureWindow | null>(null)
+  const [canvas, setCanvas] = React.useState<HTMLCanvasElement | null>(null)
 
   const draggablePanel = useDraggableElement<HTMLDivElement>({
     xBuff: 100,
@@ -187,71 +137,6 @@ export default function App() {
     xReverse: false,
     yReverse: false,
   })  // TODO: storage
-
-  // const onClickToggleButton = () => {
-  //   if (pipWindowRef.current) {
-  //     // if (!pipWindowRef.current.closed) {
-  //     //   pipWindowRef.current.close()
-  //     // }
-  //     pipWindowRef.current = null
-  //   } else {
-  //     if (pipVideoRef.current) {
-  //       pipVideoRef.current.requestPictureInPicture().then(((pipWindow) => {
-  //         pipWindow.addEventListener('unload', () => {
-  //           pipWindowRef.current = null
-  //         })
-  //         pipWindowRef.current = pipWindow
-  //       }))
-  //     }
-  //   }
-  // }
-
-  // React.useEffect(() => {
-  //   if (pipVisible) {
-  //     pipVideoRef.current
-  //   }
-  // }, [pipVisible])
-
-  // const channel = React.useRef(new BroadcastChannel('ld-channel'))
-  const video = React.useRef<HTMLVideoElement | null>(null)
-  const mediaMonitor = React.useRef<MediaMonitor | null>(null)
-
-  const [currentTime, setCurrentTime] = React.useState(0.0)
-  // const layerRef = React.useRef<Konva.Layer | null>(null)
-
-  React.useEffect(() => {
-    if (!video.current) {
-      const player = document.getElementById('bilibili-player')
-      if (player) {
-        video.current = player.getElementsByTagName('video').item(0)
-      }
-    }
-    if (!video.current) {
-      return
-    }
-    if (!mediaMonitor.current) {
-      mediaMonitor.current = new MediaMonitor(video.current, 64)
-    }
-
-    const interval = setInterval(() => {
-      if (video.current) {
-        setCurrentTime(video.current.currentTime)
-      }
-    }, 1000 / 30)
-    return () => {
-      clearInterval(interval)
-    }
-  }, [])
-
-  // const stream = React.useRef<MediaStream | null>(null)
-  // React.useEffect(() => {
-  //   if (pipVideoRef.current && layerRef.current && !stream.current) {
-  //     const canvas = layerRef.current.getNativeCanvasElement()
-  //     stream.current = canvas.captureStream()
-  //     pipVideoRef.current.srcObject = stream.current
-  //     pipVideoRef.current.play()
-  //   }
-  // }, [])
 
   return (
     <div className={styles.app}>
@@ -280,14 +165,14 @@ export default function App() {
           settingsVisible={settingsVisible}
         />
       </div>
-      <Pip
+      <Display
+        setCanvas={setCanvas}
+      />
+      <PipVideo
+        canvas={canvas}
         pipVisible={pipVisible}
         setPipVisible={setPipVisible}
-      >
-        <Display
-          currentTime={currentTime}
-        />
-      </Pip>
+      />
     </div>
   )
 }
