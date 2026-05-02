@@ -33,11 +33,12 @@ import { Layer, Stage, Text } from 'react-konva'
 
 function useByElement<N extends Node, T>(
   elementCallback: () => N | null,
-  dataCallback: (element: N) => Promise<T>,
+  dataCallback: (element: N) => T,
   options?: MutationObserverInit,
 ) {
   const ref = React.useRef<T | null>(null)
-  const lock = React.useRef(false)
+  // const lock = React.useRef(false)
+  // const [isPending, startTransition] = React.useTransition()
 
   React.useEffect(() => {
     const element = elementCallback()
@@ -45,19 +46,10 @@ function useByElement<N extends Node, T>(
       return
     }
 
-    const callback = async () => {
-      if (lock.current) {
-        return
-      }
-      lock.current = true
-      try {
-        ref.current = await dataCallback(element)
-      } finally {
-        lock.current = false
-      }
-    }
-    callback()
-    const observer = new MutationObserver(callback)
+    ref.current = dataCallback(element)
+    const observer = new MutationObserver(() => {
+      ref.current = dataCallback(element)
+    })
     observer.observe(element, options)
     return () => {
       observer.disconnect()
@@ -78,7 +70,7 @@ class Lyrics {
     this.meta = new Map()
     this.lines = []
     for (const text of lrc.split('\n').map(text => text.trim())) {
-      const lineExec = /^\[(?:(\d+)\:)?(\d+(?:\.(\d+))?)\](.*)$/g.exec(text)
+      const lineExec = /^\[(?:(\d+)\:)?(\d+(?:\.\d+)?)\](.*)$/g.exec(text)
       if (lineExec) {
         this.lines.push({
           time: (lineExec[1] ? parseFloat(lineExec[1]) * 60 : 0) + parseFloat(lineExec[2]),
@@ -106,7 +98,7 @@ interface SongInfo {
     original: Lyrics | null,
     translated: Lyrics | null,
     karaoke: Lyrics | null,
-  },
+  } | null,
 }
 
 async function searchSong(keyword: string) {
@@ -121,7 +113,7 @@ async function searchSong(keyword: string) {
   const song = searchResponse?.result?.songs?.[0]
   const id = song?.id
   if (!id) {
-    return
+    return null
   }
   const lyricsResponse = await chrome.runtime.sendMessage({
     path: 'song/lyric',
@@ -156,11 +148,11 @@ async function searchSong(keyword: string) {
     name: song?.name ?? null,
     artists: song?.ar?.map((artist: any) => artist.name) ?? null,
     publishDate: convertTime(song?.publishTime),
-    lyrics: {
-      original: convertLyrics(lyricsResponse?.lrc?.lyric),
-      translated: convertLyrics(lyricsResponse?.tlyric?.lyric),
-      karaoke: convertLyrics(lyricsResponse?.klyric?.lyric),
-    },
+    lyrics: lyricsResponse ? {
+      original: convertLyrics(lyricsResponse.lrc?.lyric),
+      translated: convertLyrics(lyricsResponse.tlyric?.lyric),
+      karaoke: convertLyrics(lyricsResponse.klyric?.lyric),
+    } : null,
   } as SongInfo
 }
 
@@ -183,7 +175,7 @@ export default function Display(props: Props) {
 
   const media = useByElement(
     () => document.getElementById('bilibili-player')?.getElementsByTagName('video').item(0) ?? null,
-    async (media) => media,
+    (media) => media,
     { attributes: true },
   )
 
@@ -205,14 +197,27 @@ export default function Display(props: Props) {
   // }, [])
   // const media = mediaRef.current
 
-  const songInfo = useByElement(
-    () => document.querySelector('div.tag-link.bgm-link'),
-    async (element) => {
-      const keyword = /^发现《(.+?)(?:\s*\(.+\))?》$/g.exec(element.getAttribute('title') ?? '')?.[1].trim()
-      return keyword ? await searchSong(keyword) : null
-    },
-    { attributes: true },
+  const keyword = useByElement(
+    () => document.getElementsByClassName('tag-panel')[0],
+    (element) => /^发现《(.+?)(?:\s*\(.+\))?》$/g.exec(
+      element.querySelector('.tag-link.bgm-link')?.getAttribute('title') ?? '',
+    )?.[1].trim() ?? '',
+    { childList: true, subtree: true },
   )
+
+  const songInfo = React.useRef<SongInfo | null>(null)
+  React.useEffect(() => {
+    if (!keyword) {
+      songInfo.current = null
+      return
+    }
+    const timeout = setTimeout(async () => {
+      songInfo.current = await searchSong(keyword)
+    })
+    return () => {
+      clearTimeout(timeout)
+    }
+  }, [keyword])
 
   // React.useEffect(() => {
   //   console.log(url)
@@ -221,6 +226,7 @@ export default function Display(props: Props) {
   const [currentTime, setCurrentTime] = React.useState(0.0)
   React.useEffect(() => {
     if (!media) {
+      setCurrentTime(0.0)
       return
     }
     const interval = setInterval(() => {
@@ -234,6 +240,7 @@ export default function Display(props: Props) {
   const [byteFrequencyData, setByteFrequencyData] = React.useState(new Uint8Array())
   React.useEffect(() => {
     if (!media) {
+      setByteFrequencyData(new Uint8Array())
       return
     }
     const audioCtx = new AudioContext()
@@ -259,7 +266,7 @@ export default function Display(props: Props) {
     <Stage width={400} height={200}>
       <Layer ref={layer}>
         <Text
-          text={`${songInfo?.name}`}
+          text={`${songInfo.current?.name}`}
           x={50}
           y={50}
           fontSize={20}
@@ -269,7 +276,7 @@ export default function Display(props: Props) {
           fillAfterStrokeEnabled
         />
         <Text
-          text={`${byteFrequencyData.length}: ${byteFrequencyData}`}
+          text={`${songInfo.current?.lyrics?.original?.lines[9].text}`}
           x={50}
           y={100}
           fontSize={20}
