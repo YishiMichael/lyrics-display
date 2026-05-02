@@ -16,29 +16,12 @@ import { Layer, Stage, Text } from 'react-konva'
 //   return href.current
 // }
 
-// function useByHref<T>(callback: (href: string) => Promise<T>, href: string) {
-//   const ref = React.useRef<T | null>(null)
-//   React.useEffect(() => {
-//     const timeout = setTimeout(() => {
-//       callback(href).then((data) => {
-//         ref.current = data
-//       })
-//     }, 300)
-//     return () => {
-//       clearTimeout(timeout)
-//     }
-//   }, [href])
-//   return ref.current
-// }
-
 function useByElement<N extends Node, T>(
   elementCallback: () => N | null,
   dataCallback: (element: N) => T,
   options?: MutationObserverInit,
 ) {
   const ref = React.useRef<T | null>(null)
-  // const lock = React.useRef(false)
-  // const [isPending, startTransition] = React.useTransition()
 
   React.useEffect(() => {
     const element = elementCallback()
@@ -60,8 +43,8 @@ function useByElement<N extends Node, T>(
 }
 
 class Lyrics {
-  meta: Map<string, string>
-  lines: {
+  private meta: Map<string, string>
+  private lines: {
     time: number,
     text: string,
   }[]
@@ -83,6 +66,19 @@ class Lyrics {
         }
       }
     }
+  }
+
+  getLine(time: number) {
+    let currentLine = {
+      time: 0.0,
+      text: '',
+    }
+    for (const line of this.lines) {
+      if (line.time < time) {
+        currentLine = line
+      }
+    }
+    return currentLine
   }
 }
 
@@ -107,10 +103,13 @@ async function searchSong(keyword: string) {
     body: {
       s: keyword,
       type: 1,
-      limit: 1,
+      limit: 10,
     },
   })
-  const song = searchResponse?.result?.songs?.[0]
+  const song = searchResponse?.result?.songs?.reduce(
+    (prev: any, current: any) => (prev.pop >= current.pop) ? prev : current
+  )
+
   const id = song?.id
   if (!id) {
     return null
@@ -167,35 +166,11 @@ export default function Display(props: Props) {
     props.setCanvas(layer.current?.getNativeCanvasElement() ?? null)
   }, [])
 
-  // const href = useHref()
-
-  // const media = useByHref(async (_) => {
-  //   return document.getElementById('bilibili-player')?.getElementsByTagName('video').item(0) ?? null
-  // }, href)
-
   const media = useByElement(
     () => document.getElementById('bilibili-player')?.getElementsByTagName('video').item(0) ?? null,
     (media) => media,
     { attributes: true },
   )
-
-  // React.useEffect(() => {
-  //   const node = document.getElementById('bilibili-player')?.getElementsByTagName('video').item(0) ?? null
-  //   if (!node) {
-  //     return
-  //   }
-  //   console.log("updated", node)
-  //   mediaRef.current = node
-  //   const observer = new MutationObserver(() => {
-  //     console.log("updated1", node)
-  //     mediaRef.current = node
-  //   })
-  //   observer.observe(node, { attributes: true })
-  //   return () => {
-  //     observer.disconnect()
-  //   }
-  // }, [])
-  // const media = mediaRef.current
 
   const keyword = useByElement(
     () => document.getElementsByClassName('tag-panel')[0],
@@ -276,7 +251,7 @@ export default function Display(props: Props) {
           fillAfterStrokeEnabled
         />
         <Text
-          text={`${songInfo.current?.lyrics?.original?.lines[9].text}`}
+          text={`${songInfo.current?.lyrics?.original?.getLine(currentTime).text}`}
           x={50}
           y={100}
           fontSize={20}
