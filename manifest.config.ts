@@ -16,11 +16,11 @@ export default defineManifest({
   },
   host_permissions: [
     "https://music.163.com/*",
-    'https://www.bilibili.com/*',
+    'https://*.bilibili.com/*',
   ],
   content_scripts: [{
     js: ['src/content/main.tsx'],
-    matches: ['https://www.bilibili.com/*'],
+    matches: ['https://*.bilibili.com/*'],
   }],
   background: {
     service_worker: 'src/background.ts',

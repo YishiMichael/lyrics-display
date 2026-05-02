@@ -2,21 +2,65 @@ import React from 'react'
 import Konva from 'konva'
 import { Layer, Stage, Text } from 'react-konva'
 
-function useDocumentData<T>(callback: (document: Document) => Promise<T>) {
+// function useHref() {
+//   const href = React.useRef<string>(window.location.href)
+//   React.useEffect(() => {
+//     const observer = new MutationObserver(() => {
+//       href.current = window.location.href
+//     })
+//     observer.observe(document, { subtree: true, childList: true })
+//     return () => {
+//       observer.disconnect()
+//     }
+//   }, [])
+//   return href.current
+// }
+
+// function useByHref<T>(callback: (href: string) => Promise<T>, href: string) {
+//   const ref = React.useRef<T | null>(null)
+//   React.useEffect(() => {
+//     const timeout = setTimeout(() => {
+//       callback(href).then((data) => {
+//         ref.current = data
+//       })
+//     }, 300)
+//     return () => {
+//       clearTimeout(timeout)
+//     }
+//   }, [href])
+//   return ref.current
+// }
+
+function useByElement<N extends Node, T>(
+  elementCallback: () => N | null,
+  dataCallback: (element: N) => Promise<T>,
+  options?: MutationObserverInit,
+) {
   const ref = React.useRef<T | null>(null)
+  const lock = React.useRef(false)
 
   React.useEffect(() => {
-    const observer = new MutationObserver(() => {
-      callback(document).then((data) => {
-        observer.disconnect()
-        ref.current = data
-      })
-    })
+    const element = elementCallback()
+    if (!element) {
+      return
+    }
 
-    observer.observe(document.body, { childList: true, subtree: true })
+    const callback = async () => {
+      if (lock.current) {
+        return
+      }
+      lock.current = true
+      try {
+        ref.current = await dataCallback(element)
+      } finally {
+        lock.current = false
+      }
+    }
+    callback()
+    const observer = new MutationObserver(callback)
+    observer.observe(element, options)
     return () => {
       observer.disconnect()
-      ref.current = null
     }
   }, [])
 
@@ -100,12 +144,14 @@ async function searchSong(keyword: string) {
       date: date.getDate(),
     }
   }
+
   const convertLyrics = (lrc?: string) => {
     if (!lrc) {
       return null
     }
     return new Lyrics(lrc)
   }
+
   return {
     name: song?.name ?? null,
     artists: song?.ar?.map((artist: any) => artist.name) ?? null,
@@ -129,9 +175,48 @@ export default function Display(props: Props) {
     props.setCanvas(layer.current?.getNativeCanvasElement() ?? null)
   }, [])
 
-  const media = useDocumentData(async (document) => {
-    return document.getElementById('bilibili-player')?.getElementsByTagName('video').item(0) ?? undefined
-  })
+  // const href = useHref()
+
+  // const media = useByHref(async (_) => {
+  //   return document.getElementById('bilibili-player')?.getElementsByTagName('video').item(0) ?? null
+  // }, href)
+
+  const media = useByElement(
+    () => document.getElementById('bilibili-player')?.getElementsByTagName('video').item(0) ?? null,
+    async (media) => media,
+    { attributes: true },
+  )
+
+  // React.useEffect(() => {
+  //   const node = document.getElementById('bilibili-player')?.getElementsByTagName('video').item(0) ?? null
+  //   if (!node) {
+  //     return
+  //   }
+  //   console.log("updated", node)
+  //   mediaRef.current = node
+  //   const observer = new MutationObserver(() => {
+  //     console.log("updated1", node)
+  //     mediaRef.current = node
+  //   })
+  //   observer.observe(node, { attributes: true })
+  //   return () => {
+  //     observer.disconnect()
+  //   }
+  // }, [])
+  // const media = mediaRef.current
+
+  const songInfo = useByElement(
+    () => document.querySelector('div.tag-link.bgm-link'),
+    async (element) => {
+      const keyword = /^发现《(.+?)(?:\s*\(.+\))?》$/g.exec(element.getAttribute('title') ?? '')?.[1].trim()
+      return keyword ? await searchSong(keyword) : null
+    },
+    { attributes: true },
+  )
+
+  // React.useEffect(() => {
+  //   console.log(url)
+  // }, [url])
 
   const [currentTime, setCurrentTime] = React.useState(0.0)
   React.useEffect(() => {
@@ -169,12 +254,6 @@ export default function Display(props: Props) {
       clearInterval(interval)
     }
   }, [media])
-
-  const songInfo = useDocumentData(async (document) => {
-    const text = document.querySelector('div.tag-link.bgm-link')?.getAttribute('title') ?? ''
-    const keyword = /^发现《(.+?)(?:\s*\(.+\))?》$/g.exec(text)?.[1].trim()
-    return keyword ? await searchSong(keyword) : undefined
-  })
 
   return (
     <Stage width={400} height={200}>
