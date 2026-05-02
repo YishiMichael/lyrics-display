@@ -2,7 +2,7 @@ import React from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import styles from './Panel.module.css'
 
-interface Attrs {
+interface Props {
   ref: React.RefObject<HTMLDivElement | null>
   pipVisible: boolean
   onMouseDownDrag: (event: React.MouseEvent) => void
@@ -10,27 +10,27 @@ interface Attrs {
   onClickSettingsButton: () => void
 }
 
-export default function Panel(attrs: Attrs) {
+export default function Panel(props: Props) {
   return (
     <div
-      ref={attrs.ref}
+      ref={props.ref}
       className={styles.panel}
     >
       <div
-        className={attrs.pipVisible ? styles.pipButtonActive : styles.pipButton}
-        onClick={attrs.onClickPipButton}
+        className={props.pipVisible ? styles.pipButtonActive : styles.pipButton}
+        onClick={props.onClickPipButton}
       >
         <FontAwesomeIcon icon={['fas', 'music']} size='xl'/>
       </div>
       <div
         className={styles.settingsButton}
-        onClick={attrs.onClickSettingsButton}
+        onClick={props.onClickSettingsButton}
       >
         <FontAwesomeIcon icon={['fas', 'gear']} size='xl'/>
       </div>
       <div
         className={styles.panelDrag}
-        onMouseDown={attrs.onMouseDownDrag}
+        onMouseDown={props.onMouseDownDrag}
       >
         <FontAwesomeIcon icon={['fas', 'grip-vertical']}/>
       </div>

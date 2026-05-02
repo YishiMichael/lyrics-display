@@ -1,12 +1,12 @@
 import React from 'react'
 
-interface Attrs {
+interface Props {
   canvas: HTMLCanvasElement | null
   pipVisible: boolean
   setPipVisible: React.Dispatch<React.SetStateAction<boolean>>
 }
 
-export default function PipVideo(attrs: Attrs) {
+export default function PipVideo(props: Props) {
   const ref = React.useRef<HTMLVideoElement | null>(null)
 
   const open = async () => {
@@ -26,22 +26,22 @@ export default function PipVideo(attrs: Attrs) {
   }
 
   React.useEffect(() => {
-    if (!attrs.canvas || !ref.current) {
+    if (!props.canvas || !ref.current) {
       return
     }
-    const stream = attrs.canvas.captureStream()
+    const stream = props.canvas.captureStream()
     ref.current.srcObject = stream
     return () => {
       stream.getTracks().forEach((track) => {
         track.stop()
       })
     }
-  }, [attrs.canvas])
+  }, [props.canvas])
 
   React.useEffect(() => {
     const handleClose = async () => {
       await close()
-      attrs.setPipVisible(false)
+      props.setPipVisible(false)
     }
 
     document.addEventListener('leavepictureinpicture', handleClose)
@@ -51,12 +51,12 @@ export default function PipVideo(attrs: Attrs) {
   }, [])
 
   React.useEffect(() => {
-    if (attrs.pipVisible) {
+    if (props.pipVisible) {
       open()
     } else {
       close()
     }
-  }, [attrs.pipVisible])
+  }, [props.pipVisible])
 
   return (
     <video

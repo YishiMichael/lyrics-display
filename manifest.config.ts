@@ -15,7 +15,8 @@ export default defineManifest({
     default_popup: 'src/popup/index.html',
   },
   host_permissions: [
-    'https://www.bilibili.com/*'
+    "https://music.163.com/*",
+    'https://www.bilibili.com/*',
   ],
   content_scripts: [{
     js: ['src/content/main.tsx'],
