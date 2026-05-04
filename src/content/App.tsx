@@ -164,15 +164,15 @@ export default function App() {
         <Settings
           settingsVisible={settingsVisible}
         />
+        <Display
+          setCanvas={setCanvas}
+        />
+        <PipVideo
+          canvas={canvas}
+          pipVisible={pipVisible}
+          setPipVisible={setPipVisible}
+        />
       </div>
-      <Display
-        setCanvas={setCanvas}
-      />
-      <PipVideo
-        canvas={canvas}
-        pipVisible={pipVisible}
-        setPipVisible={setPipVisible}
-      />
     </div>
   )
 }

@@ -64,6 +64,9 @@ export default function PipVideo(props: Props) {
       onLoadedMetadata={(event) => {
         event.currentTarget.play()
       }}
+      style={{
+        display: 'none',
+      }}
     />
   )
 }
