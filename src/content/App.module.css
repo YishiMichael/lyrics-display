@@ -13,6 +13,10 @@
   -moz-osx-font-smoothing: grayscale;
   user-select: none;
 }
+.appHidden {
+  composes: app;
+  display: none;
+}
 
 .content {
   position: fixed;

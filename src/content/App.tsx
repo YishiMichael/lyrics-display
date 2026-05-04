@@ -13,17 +13,17 @@ interface AbsolutePosition {
 }
 
 function useWindowSize() {
-  const [size, setSize] = React.useState({
-    width: Math.trunc(document.documentElement.clientWidth),
-    height: Math.trunc(document.documentElement.clientHeight),
-  })
+  const getSize = () => {
+    return {
+      width: Math.trunc(document.documentElement.clientWidth),
+      height: Math.trunc(document.documentElement.clientHeight),
+    }
+  }
+  const [size, setSize] = React.useState(getSize)
 
   React.useEffect(() => {
     const handleResize = () => {
-      requestAnimationFrame(() => setSize({
-        width: Math.trunc(document.documentElement.clientWidth),
-        height: Math.trunc(document.documentElement.clientHeight),
-      }))
+      requestAnimationFrame(() => setSize(getSize()))
     }
 
     window.addEventListener('resize', handleResize)
@@ -126,7 +126,44 @@ function useDraggableElement<T extends HTMLElement>(initialAbsPos: AbsolutePosit
   return { absPos, ref, onMouseDownDrag }
 }
 
+function useUrl() {
+  const [url, setUrl] = React.useState(() => window.location.href)
+
+  React.useEffect(() => {
+    let last = window.location.href
+
+    const observer = new MutationObserver(() => {
+      const current = window.location.href
+      if (current !== last) {
+        last = current
+        setUrl(current)
+      }
+    })
+    observer.observe(document, { subtree: true, childList: true })
+    return () => {
+      observer.disconnect()
+    }
+  }, [])
+
+  return url
+}
+
 export default function App() {
+  const url = useUrl()
+  const [bvid, setBvid] = React.useState<string | null>(null)
+  React.useEffect(() => {
+    const urlObject = new URL(url)
+    if (urlObject.pathname.startsWith('/video/')) {
+      setBvid(urlObject.pathname.split('/')[2] ?? null)
+      return
+    }
+    if (urlObject.pathname.startsWith('/list/')) {
+      setBvid(urlObject.searchParams.get('bvid'))
+      return
+    }
+    setBvid(null)
+  }, [url])
+
   const [pipVisible, setPipVisible] = React.useState(false)
   const [settingsVisible, setSettingsVisible] = React.useState(false)
   const [canvas, setCanvas] = React.useState<HTMLCanvasElement | null>(null)
@@ -139,7 +176,7 @@ export default function App() {
   })  // TODO: storage
 
   return (
-    <div className={styles.app}>
+    <div className={bvid ? styles.app : styles.appHidden}>
       <div
         className={draggablePanel.absPos.xReverse
           ? (draggablePanel.absPos.yReverse ? styles.contentSE : styles.contentNE)
@@ -166,6 +203,7 @@ export default function App() {
         />
         <Display
           setCanvas={setCanvas}
+          bvid={bvid ?? ''}
         />
         <PipVideo
           canvas={canvas}

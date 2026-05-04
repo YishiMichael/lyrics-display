@@ -149,6 +149,7 @@ function* LyricsLines(props: LyricsLinesProps) {
 
 interface Props {
   setCanvas: React.Dispatch<React.SetStateAction<HTMLCanvasElement | null>>
+  bvid: string
 }
 
 export default function Display(props: Props) {
