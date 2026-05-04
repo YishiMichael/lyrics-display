@@ -1,46 +1,18 @@
 import React from 'react'
 import Konva from 'konva'
 import * as ReactKonva from 'react-konva'
+import * as ColorThief from 'colorthief'
 import { Lyrics, SongRecord, searchSong } from './song.ts'
 
-// function useHref() {
-//   const href = React.useRef<string>(window.location.href)
-//   React.useEffect(() => {
-//     const observer = new MutationObserver(() => {
-//       href.current = window.location.href
-//     })
-//     observer.observe(document, { subtree: true, childList: true })
-//     return () => {
-//       observer.disconnect()
-//     }
-//   }, [])
-//   return href.current
-// }
-
-function useByElement<N extends Node, T>(
-  elementCallback: () => N | null,
-  dataCallback: (element: N) => T,
-  options?: MutationObserverInit,
-) {
-  const ref = React.useRef<T | null>(null)
-
-  React.useEffect(() => {
-    const element = elementCallback()
-    if (!element) {
-      return
-    }
-
-    ref.current = dataCallback(element)
-    const observer = new MutationObserver(() => {
-      ref.current = dataCallback(element)
-    })
-    observer.observe(element, options)
-    return () => {
-      observer.disconnect()
-    }
-  }, [])
-
-  return ref.current
+async function getPalette(imageUrl: string) {
+  const img = new Image()
+  img.crossOrigin = 'anonymous'
+  img.src = imageUrl
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve()
+    img.onerror = reject
+  })
+  return await ColorThief.getPalette(img, { colorCount: 6 })
 }
 
 interface LyricsLinesProps {
@@ -55,6 +27,7 @@ interface LyricsLinesProps {
 
   fontSize: number
   fontFamily: string
+  foreground: string
 }
 
 function* LyricsLines(props: LyricsLinesProps) {
@@ -86,10 +59,16 @@ function* LyricsLines(props: LyricsLinesProps) {
         : (readProportion * (props.width + size.width) - 0.5 * props.width) / size.width
       )}
       y={cursorMiddle - 0.5 * size.height}
-      stroke={'green'}
-      fill={'yellow'}
+      // fill={props.foreground}
+      fillLinearGradientStartPoint={{ x: 0, y: 0 }}
+      fillLinearGradientEndPoint={{ x: 0, y: size.height }}
+      fillLinearGradientColorStops={[
+        0.0, `color-mix(${props.foreground} 25%, white)`,
+        1.0, props.foreground,
+      ]}
+      stroke={`color-mix(${props.foreground}, black)`}
+      strokeWidth={3}
       fillAfterStrokeEnabled
-      strokeWidth={2}
       fontFamily={konvaTemplate.fontFamily()}
       fontSize={konvaTemplate.fontSize()}
       wrap={konvaTemplate.wrap()}
@@ -109,10 +88,14 @@ function* LyricsLines(props: LyricsLinesProps) {
         text={text}
         x={0.5 * Math.max(props.width - size.width, 0.0)}
         y={cursorTop}
-        stroke={'none'}
-        fill={'#8888'}
-        fillAfterStrokeEnabled
-        strokeWidth={2}
+        fillLinearGradientStartPoint={{ x: 0, y: -cursorTop }}
+        fillLinearGradientEndPoint={{ x: 0, y: -cursorTop + props.height }}
+        fillLinearGradientColorStops={[
+          0.0, 'transparent',
+          0.2, `color-mix(${props.foreground} 25%, transparent)`,
+          0.8, `color-mix(${props.foreground} 25%, transparent)`,
+          1.0, 'transparent',
+        ]}
         fontFamily={konvaTemplate.fontFamily()}
         fontSize={konvaTemplate.fontSize()}
         wrap={konvaTemplate.wrap()}
@@ -134,10 +117,14 @@ function* LyricsLines(props: LyricsLinesProps) {
         text={text}
         x={0.5 * Math.max(props.width - size.width, 0.0)}
         y={cursorBottom - size.height}
-        stroke={'none'}
-        fill={'#8888'}
-        fillAfterStrokeEnabled
-        strokeWidth={2}
+        fillLinearGradientStartPoint={{ x: 0, y: -cursorBottom + size.height }}
+        fillLinearGradientEndPoint={{ x: 0, y: -cursorBottom + size.height + props.height }}
+        fillLinearGradientColorStops={[
+          0.0, 'transparent',
+          0.2, `color-mix(${props.foreground} 25%, transparent)`,
+          0.8, `color-mix(${props.foreground} 25%, transparent)`,
+          1.0, 'transparent',
+        ]}
         fontFamily={konvaTemplate.fontFamily()}
         fontSize={konvaTemplate.fontSize()}
         wrap={konvaTemplate.wrap()}
@@ -148,8 +135,9 @@ function* LyricsLines(props: LyricsLinesProps) {
 }
 
 interface Props {
+  bvid: string | null
+  setAppVisible: React.Dispatch<React.SetStateAction<boolean>>
   setCanvas: React.Dispatch<React.SetStateAction<HTMLCanvasElement | null>>
-  bvid: string
 }
 
 export default function Display(props: Props) {
@@ -159,58 +147,70 @@ export default function Display(props: Props) {
     props.setCanvas(layer.current?.getNativeCanvasElement() ?? null)
   }, [])
 
-  const media = useByElement(
-    () => document.getElementById('bilibili-player')?.getElementsByTagName('video').item(0) ?? null,
-    (media) => media,
-    { attributes: true },
-  )
+  const getSwatches = (palette: ColorThief.Color[] | null) => {
+    const darkFindIndex = palette?.findIndex((color) => color.isDark) ?? -1
+    const darkIndex = darkFindIndex !== -1 ? darkFindIndex : (palette?.length ?? 0)
+    const darkColor = palette?.[darkIndex]?.hex() ?? '#333333'
+    const lightFindIndex = palette?.findIndex((color) => color.isLight) ?? -1
+    const lightIndex = lightFindIndex !== -1 ? lightFindIndex : (palette?.length ?? 0)
+    const lightColor = palette?.[lightIndex]?.hex() ?? '#ffffff'
+    return darkIndex <= lightIndex ? {
+      background: darkColor,
+      foreground: lightColor,
+    } : {
+      background: lightColor,
+      foreground: darkColor,
+    }
+  }
 
-  const keyword = useByElement(
-    () => document.getElementsByClassName('tag-panel')[0],
-    (element) => /^发现《(.+?)(?:\s*\(.+\))?》$/g.exec(
-      element.querySelector('.tag-link.bgm-link')?.getAttribute('title') ?? '',
-    )?.[1].trim() ?? '',
-    { childList: true, subtree: true },
-  )
-
-  const postEapi = (path: string, body: any) => chrome.runtime.sendMessage({ path, body })
-
+  const [swatches, setSwatches] = React.useState(getSwatches(null))
   const song = React.useRef<SongRecord | null>(null)
   React.useEffect(() => {
-    if (!keyword) {
-      song.current = null
+    if (!props.bvid) {
       return
     }
-    const timeout = setTimeout(async () => {
-      song.current = await searchSong(keyword, postEapi)
-    })
-    return () => {
-      clearTimeout(timeout)
-    }
-  }, [keyword])
+    fetch(`https://api.bilibili.com/x/web-interface/view/detail?bvid=${props.bvid}`, {
+      method: 'GET',
+      credentials: 'include',
+    }).then((response) => response.json()).then((json) => Promise.all([
+      (async () => {
+        const pic = json?.data?.View?.pic ?? null
+        try {
+          setSwatches(getSwatches(pic ? await getPalette(pic) : null))
+        } catch {
+          setSwatches(getSwatches(null))
+        }
+      })(),
+      (async () => {
+        const tagName = json?.data?.Tags?.find((tag: any) => tag.tag_type === 'bgm')?.tag_name ?? ''
+        const keyword = /^发现《(.+?)(?:\s*\(.+\))?》$/g.exec(tagName)?.[1].trim() ?? tagName
+        try {
+          song.current = keyword ? await searchSong(
+            keyword,
+            (path: string, body: any) => chrome.runtime.sendMessage({ path, body }),
+          ) : null
+        } catch {
+          song.current = null
+        }
+      })()
+    ]))
+  }, [props.bvid])
 
-  // React.useEffect(() => {
-  //   console.log(url)
-  // }, [url])
+  const media = (() => {
+    const mediaRef = React.useRef<HTMLVideoElement | null>(null)
+    React.useEffect(() => {
+      if (mediaRef.current) {
+        return
+      }
+      mediaRef.current = document.getElementById('bilibili-player')?.getElementsByTagName('video').item(0) ?? null
+    }, [])
+    return mediaRef.current
+  })()
 
   const [currentTime, setCurrentTime] = React.useState(0.0)
+  const byteFrequencyData = React.useRef<Uint8Array | null>(null)
   React.useEffect(() => {
     if (!media) {
-      setCurrentTime(0.0)
-      return
-    }
-    const interval = setInterval(() => {
-      setCurrentTime(media.currentTime)
-    })
-    return () => {
-      clearInterval(interval)
-    }
-  }, [media])
-
-  const [byteFrequencyData, setByteFrequencyData] = React.useState(new Uint8Array())
-  React.useEffect(() => {
-    if (!media) {
-      setByteFrequencyData(new Uint8Array())
       return
     }
     const audioCtx = new AudioContext()
@@ -220,61 +220,79 @@ export default function Display(props: Props) {
     source.connect(analyser)
     analyser.connect(audioCtx.destination)
     const dataArray = new Uint8Array(analyser.frequencyBinCount)
-    const interval = setInterval(() => {
+    byteFrequencyData.current = dataArray
+    const currentTimeInterval = setInterval(() => {
+      setCurrentTime(media?.currentTime ?? 0.0)
+    })
+    const byteFrequencyDataInterval = setInterval(() => {
       analyser.getByteFrequencyData(dataArray)
-      setByteFrequencyData(dataArray)
     }, 100)
+    props.setAppVisible(true)
     return () => {
+      setCurrentTime(0.0)
+      byteFrequencyData.current = null
       source.disconnect()
       analyser.disconnect()
       audioCtx.close()
-      clearInterval(interval)
+      clearInterval(currentTimeInterval)
+      clearInterval(byteFrequencyDataInterval)
+      props.setAppVisible(false)
     }
   }, [media])
 
   return (
     <ReactKonva.Stage
-      width={100}
+      width={600}
       height={200}
       style={{
         display: 'none',
       }}
     >
       <ReactKonva.Layer ref={layer}>
-        <ReactKonva.Group>
+        <ReactKonva.Rect
+          width={600}
+          height={200}
+          fill={swatches.background}
+        />
+        <ReactKonva.Group
+          x={50}
+          y={50}
+        >
           <LyricsLines
             lyrics={song.current?.lyrics?.original ?? null}
             currentTime={currentTime}
-            width={100}
-            height={100}
-            lineGap={10}
-            focusOffset={50}
+            width={500}
+            height={150}
+            lineGap={20}
+            focusOffset={60}
             jumpTime={0.1}
-            fontSize={20}
-            fontFamily={'LXGW WenKai'}
+            fontSize={40}
+            fontFamily={'Source Han Serif JP VF, Source Han Serif SC VF'}
+            foreground={swatches.foreground}
           />
         </ReactKonva.Group>
         <ReactKonva.Text
-          text={`${song.current?.name}`}
-          x={30}
-          y={150}
+          text={song.current?.name ?? ''}
+          width={560}
+          x={20}
+          y={20}
           fontSize={20}
-          stroke='green'
-          fill='yellow'
-          strokeWidth={3}
-          fillAfterStrokeEnabled
+          fill={swatches.foreground}
+          align='left'
+          verticalAlign='top'
+          fontFamily={'Source Han Serif JP VF, Source Han Serif SC VF'}
         />
-        {/*<ReactKonva.Text
-          text={`${currentTime}`}
-          x={50}
-          y={120}
-          fontSize={20}
-          stroke='green'
-          fill='yellow'
-          strokeWidth={3}
-          fontFamily='LXGW WenKai'
-          fillAfterStrokeEnabled
-        />*/}
+        <ReactKonva.Text
+          text={song.current?.artists?.join('・') ?? ''}
+          width={560}
+          x={20}
+          y={20}
+          fontSize={15}
+          fill={swatches.foreground}
+          align='right'
+          verticalAlign='top'
+          fontFamily={'Source Han Serif JP VF, Source Han Serif SC VF'}
+        />
       </ReactKonva.Layer>
     </ReactKonva.Stage>
   )

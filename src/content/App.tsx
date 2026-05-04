@@ -23,7 +23,7 @@ function useWindowSize() {
 
   React.useEffect(() => {
     const handleResize = () => {
-      requestAnimationFrame(() => setSize(getSize()))
+      requestAnimationFrame(() => setSize(getSize))
     }
 
     window.addEventListener('resize', handleResize)
@@ -60,27 +60,23 @@ function useDraggableElement<T extends HTMLElement>(initialAbsPos: AbsolutePosit
 
   const [absPos, setAbsPos] = React.useState<AbsolutePosition>(initialAbsPos)
 
-  const updateAbsPos = (
-    absPos: AbsolutePosition,
-    windowSize: { width: number, height: number },
-    elementSize: { width: number, height: number },
-  ) => {
+  const calcAbsPos = (absPos: AbsolutePosition) => {
     const width = Math.max(windowSize.width - elementSize.width, 0)
     const height = Math.max(windowSize.height - elementSize.height, 0)
     const xBuff = Math.min(Math.max(absPos.xBuff, 0), width)
     const yBuff = Math.min(Math.max(absPos.yBuff, 0), height)
     const xRevert = 2 * xBuff > width
     const yRevert = 2 * yBuff > height
-    setAbsPos({
+    return {
       xBuff: xRevert ? width - xBuff : xBuff,
       yBuff: yRevert ? height - yBuff : yBuff,
       xReverse: absPos.xReverse !== xRevert,
       yReverse: absPos.yReverse !== yRevert,
-    })
+    }
   }
 
   React.useEffect(() => {
-    updateAbsPos(absPos, windowSize, elementSize)
+    setAbsPos(calcAbsPos)
   }, [windowSize, elementSize])
 
   const dragInitial = React.useRef<{ absPos: AbsolutePosition, clientX: number, clientY: number } | null>(null)
@@ -102,12 +98,12 @@ function useDraggableElement<T extends HTMLElement>(initialAbsPos: AbsolutePosit
       y: event.clientY - dragInitial.current.clientY,
     }
     const absPos = dragInitial.current.absPos
-    updateAbsPos({
+    setAbsPos(calcAbsPos({
       xBuff: absPos.xReverse ? absPos.xBuff - clientDiff.x : absPos.xBuff + clientDiff.x,
       yBuff: absPos.yReverse ? absPos.yBuff - clientDiff.y : absPos.yBuff + clientDiff.y,
       xReverse: absPos.xReverse,
       yReverse: absPos.yReverse,
-    }, windowSize, elementSize)
+    }))
   }
 
   const onMouseUp = () => {
@@ -127,16 +123,16 @@ function useDraggableElement<T extends HTMLElement>(initialAbsPos: AbsolutePosit
 }
 
 function useUrl() {
-  const [url, setUrl] = React.useState(() => window.location.href)
+  const urlRef = React.useRef(window.location.href)
 
   React.useEffect(() => {
     let last = window.location.href
 
-    const observer = new MutationObserver(() => {
+    const observer = new MutationObserver(async () => {
       const current = window.location.href
       if (current !== last) {
         last = current
-        setUrl(current)
+        urlRef.current = current
       }
     })
     observer.observe(document, { subtree: true, childList: true })
@@ -145,7 +141,7 @@ function useUrl() {
     }
   }, [])
 
-  return url
+  return urlRef.current
 }
 
 export default function App() {
@@ -164,6 +160,7 @@ export default function App() {
     setBvid(null)
   }, [url])
 
+  const [appVisible, setAppVisible] = React.useState(false)
   const [pipVisible, setPipVisible] = React.useState(false)
   const [settingsVisible, setSettingsVisible] = React.useState(false)
   const [canvas, setCanvas] = React.useState<HTMLCanvasElement | null>(null)
@@ -176,7 +173,7 @@ export default function App() {
   })  // TODO: storage
 
   return (
-    <div className={bvid ? styles.app : styles.appHidden}>
+    <div className={appVisible ? styles.app : styles.appHidden}>
       <div
         className={draggablePanel.absPos.xReverse
           ? (draggablePanel.absPos.yReverse ? styles.contentSE : styles.contentNE)
@@ -202,8 +199,9 @@ export default function App() {
           settingsVisible={settingsVisible}
         />
         <Display
+          bvid={bvid}
+          setAppVisible={setAppVisible}
           setCanvas={setCanvas}
-          bvid={bvid ?? ''}
         />
         <PipVideo
           canvas={canvas}
