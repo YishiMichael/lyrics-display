@@ -80,75 +80,94 @@ export interface SongRecord {
   },
 }
 
-export async function searchSong(text: string, postEapi: (path: string, body: any) => Promise<any>) {
-  const textSegments = (text: string) => Array.from(text.matchAll(/[\p{L}\p{N}]+/gu)).map((g) => g[0])
-  // const extract = (text: string) => text
-  //     .replaceAll(/\u3010(.*?)\u3011/g, '')
-  //     .replaceAll(/\uff08(.*?)\uff09/g, '')
-  //     .replaceAll(/\(.*?\)/g, '')
-  //     .replaceAll(/\bfeat\..+/g, '')
-  //     .replaceAll(/\bvo\..+/g, '')
-  //     .trim()
+export async function searchSong(text: string, matcher: string, postEapi: (path: string, body: any) => Promise<any>) {
+  const splitSegments = (text: string) => Array.from(text.matchAll(/[\p{L}\p{N}]+/gu)).map((g) => g[0])
 
-  // const fuzzyInclude = (input: string, searchString: string) => {
-  //   return ` ${input.replaceAll(/[^\p{L}\p{N}]+/gu, ' ')} `.includes(` ${searchString.replaceAll(/[^\p{L}\p{N}]+/gu, ' ')} `)
-  // }
-
-  // const keyword = ''.slice()
-  //   || /\u300a(.*?)\u300b/g.exec(text)?.[1].trim()
-  //   || /\u300e(.*?)\u300f/g.exec(text)?.[1].trim()
-  //   || /\u300c(.*?)\u300d/g.exec(text)?.[1].trim()
-  //   || text
-  //     .replaceAll(/\u3010.*?\u3011/g, '')
-  //     .replaceAll(/\uff08.*?\uff09/g, '')
-  //     .replaceAll(/\(.*?\)/g, '')
-  //     .replaceAll(/\bfeat\..+/g, '')
-  //     .replaceAll(/\bvo\..+/g, '')
-  //     .trim()
-
-  const segments = textSegments(text)
-  const keyword = /\u300a(.*?)\u300b/g.exec(text)?.[1].trim() || text
+  const keyword = splitSegments((
+    ''.slice()
+    || /\u300a(.*?)\u300b/g.exec(text)?.[1].trim()
+    || /\u300e(.*?)\u300f/g.exec(text)?.[1].trim()
+    || /\u300c(.*?)\u300d/g.exec(text)?.[1].trim()
+    || text
+  )
     .replaceAll(/\u3010.*?\u3011/g, '')
     .replaceAll(/\uff08.*?\uff09/g, '')
     .replaceAll(/\(.*?\)/g, '')
     .replaceAll(/\bfeat\..+/g, '')
     .replaceAll(/\bvo\..+/g, '')
+    .replaceAll(/\/.+/g, '')
     .trim()
+  ).join(' ')
+  const matcherSegments = splitSegments(
+    matcher
+    .replaceAll(/\bfeat\./g, '')
+    .replaceAll(/\bvo\./g, '')
+  )
 
-  // const keyword = (
-  //   /\u300a(.*?)\u300b/g.exec(extract(text))?.[1].trim()
-  //   || /\u300e(.*?)\u300f/g.exec(text)?.[1].trim()
-  //   || /\u300c(.*?)\u300d/g.exec(text)?.[1].trim()
-  //   || extract(text)
-  // )
-  // const segments = 
-  // console.log(segments.join(' '), duration)
   const song = ((await postEapi('cloudsearch/pc', {
-    s: textSegments(keyword).join(' '),
+    s: keyword,
     type: 1,
     limit: 10,
   }))?.result?.songs as any[] | undefined)
     ?.map((song) => {
-      if (!(song && song.id && song.name && song.ar && song.dt && song.pop)) {
+      const id = song?.id as number | undefined
+      const name = song?.name as string | undefined
+      const ar = song?.ar as any[] | undefined
+      const dt = song?.dt as number | undefined
+      const pop = song?.pop as number | undefined
+      const alia = song?.alia as string[] | undefined
+      const tns = song?.tns as string[] | undefined
+      if (id === undefined || name === undefined || ar === undefined || dt === undefined || pop === undefined) {
         return undefined
       }
-      const id = song.id as number
-      const name = song.name as string
-      const artists = (song.ar as any[]).map((artist) => artist.name as string | undefined).filter((name) => name !== undefined)
-      const duration = song.dt as number / 1000
-      const pop = song.pop as number
+      const artists = ar.map((artist) => {
+        const name = artist?.name as string | undefined
+        const alia = artist?.alia as string[] | undefined
+        const alias = artist?.alias as string[] | undefined
+        const tns = artist?.tns as string[] | undefined
+        if (name === undefined) {
+          return undefined
+        }
+        return { name, alia, alias, tns }
+      }).filter((artist) => artist !== undefined)
 
-      const nameMatches = textSegments(name).filter(segment => segments.includes(segment)).length
-      const artistsMatches = artists.flatMap(textSegments).filter(segment => segments.includes(segment)).length
-      if (!nameMatches || !artistsMatches) {
+      const remainingSegments = new Set(matcherSegments)
+      const artistsMatches = artists.filter((artist) => [
+          artist.name,
+          ...artist.alia ?? [],
+          ...artist.alias ?? [],
+          ...artist.tns ?? []
+        ]
+          .map((artist) => splitSegments(artist).filter((segment) => remainingSegments.has(segment)))
+          .reduce((previous, current) => current.length > previous.length ? current : previous)
+          .map((segment) => remainingSegments.delete(segment))
+          .length !== 0
+      ).length
+      const nameMatches = [
+        name,
+        ...alia ?? [],
+        ...tns ?? [],
+      ]
+        .map((name) => splitSegments(name).filter((segment) => remainingSegments.has(segment)))
+        .reduce((previous, current) => current.length > previous.length ? current : previous)
+        .map((segment) => remainingSegments.delete(segment))
+        .length
+      // console.log({
+      //   id,
+      //   name,
+      //   artists: artists.map((artist) => artist.name),
+      //   duration: dt / 1000,
+      //   score: [nameMatches, artistsMatches, remainingSegments, pop] as const,
+      // })
+      if (!nameMatches) {
         return undefined
       }
       return {
         id,
         name,
-        artists,
-        duration,
-        score: [nameMatches, artistsMatches, pop] as const,
+        artists: artists.map((artist) => artist.name),
+        duration: dt / 1000,
+        score: [nameMatches, artistsMatches, -remainingSegments.size, pop] as const,
       }
     })
     ?.filter((song) => song !== undefined)

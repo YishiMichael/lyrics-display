@@ -240,12 +240,13 @@ export default function Display(props: Props) {
         }
       })(),
       (async () => {
-        // const text = json?.data?.Tags?.find((tag: any) => tag.tag_type === 'bgm')?.tag_name ?? json?.data?.View?.title ?? null
-        const text = json?.data?.View?.title ?? null
+        const title = json?.data?.View?.title ?? null
+        const text = json?.data?.Tags?.find((tag: any) => tag.tag_type === 'bgm')?.tag_name ?? title
+        // const text = json?.data?.View?.title ?? null
         // console.log(json?.data)
         // const duration = json?.data?.View?.pages?.find((page) => page?.page === p)?.duration ?? null
         try {
-          setSong(text ? await searchSong(text, postEapi) : null)
+          setSong(text ? await searchSong(text, title, postEapi) : null)
         } catch {
           setSong(null)
         }
