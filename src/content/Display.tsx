@@ -1,19 +1,9 @@
 import React from 'react'
 import Konva from 'konva'
 import * as ReactKonva from 'react-konva'
-import * as ColorThief from 'colorthief'
+import { Palette, Swatch, rgbDiff } from '@vibrant/color'
+import { Vibrant } from 'node-vibrant/browser'
 import { Lyrics, SongRecord, searchSong } from './song.ts'
-
-async function getPalette(imageUrl: string, colorCount?: number) {
-  const img = new Image()
-  img.crossOrigin = 'anonymous'
-  img.src = imageUrl
-  await new Promise<void>((resolve, reject) => {
-    img.onload = () => resolve()
-    img.onerror = reject
-  })
-  return await ColorThief.getPalette(img, { colorCount })
-}
 
 function* LyricsLines(props: {
   lyrics: Lyrics | null
@@ -28,7 +18,6 @@ function* LyricsLines(props: {
   fontSize: number
   fontFamily: string
   foreground: string
-  background: string
 }) {
   if (!props.lyrics) {
     return
@@ -65,7 +54,7 @@ function* LyricsLines(props: {
         1.0, props.foreground,
       ]}
       stroke={`color-mix(${props.foreground} 50%, black)`}
-      strokeWidth={3}
+      strokeWidth={2}
       fillAfterStrokeEnabled
       fontFamily={konvaTemplate.fontFamily()}
       fontSize={konvaTemplate.fontSize()}
@@ -89,21 +78,21 @@ function* LyricsLines(props: {
         fillLinearGradientStartPoint={{ x: 0, y: -cursorTop }}
         fillLinearGradientEndPoint={{ x: 0, y: -cursorTop + props.height }}
         fillLinearGradientColorStops={[
-          0.0, `${props.background}`,
-          0.1, `color-mix(${props.foreground} 50%, ${props.background}) 50%`,
-          0.9, `color-mix(${props.foreground} 50%, ${props.background}) 50%`,
-          1.0, `${props.background}`,
+          0.0, `${props.foreground}00`,
+          0.2, `${props.foreground}AA`,
+          0.8, `${props.foreground}AA`,
+          1.0, `${props.foreground}00`,
         ]}
-        strokeLinearGradientStartPoint={{ x: 0, y: -cursorTop }}
-        strokeLinearGradientEndPoint={{ x: 0, y: -cursorTop + props.height }}
-        strokeLinearGradientColorStops={[
-          0.0, `${props.background}00`,
-          0.1, `color-mix(color-mix(${props.foreground} 50%, ${props.background}) 50%, black)`,
-          0.9, `color-mix(color-mix(${props.foreground} 50%, ${props.background}) 50%, black)`,
-          1.0, `${props.background}00`,
-        ]}
-        strokeWidth={2}
-        fillAfterStrokeEnabled
+        // strokeLinearGradientStartPoint={{ x: 0, y: -cursorTop }}
+        // strokeLinearGradientEndPoint={{ x: 0, y: -cursorTop + props.height }}
+        // strokeLinearGradientColorStops={[
+        //   0.0, `${props.background}00`,
+        //   0.1, `color-mix(color-mix(${props.foreground} 50%, ${props.background}) 50%, black)`,
+        //   0.9, `color-mix(color-mix(${props.foreground} 50%, ${props.background}) 50%, black)`,
+        //   1.0, `${props.background}00`,
+        // ]}
+        // strokeWidth={2}
+        // fillAfterStrokeEnabled
         fontFamily={konvaTemplate.fontFamily()}
         fontSize={konvaTemplate.fontSize()}
         wrap={konvaTemplate.wrap()}
@@ -128,21 +117,21 @@ function* LyricsLines(props: {
         fillLinearGradientStartPoint={{ x: 0, y: -cursorBottom + size.height }}
         fillLinearGradientEndPoint={{ x: 0, y: -cursorBottom + size.height + props.height }}
         fillLinearGradientColorStops={[
-          0.0, `${props.background}`,
-          0.1, `color-mix(${props.foreground} 50%, ${props.background}) 50%`,
-          0.9, `color-mix(${props.foreground} 50%, ${props.background}) 50%`,
-          1.0, `${props.background}`,
+          0.0, `${props.foreground}00`,
+          0.2, `${props.foreground}AA`,
+          0.8, `${props.foreground}AA`,
+          1.0, `${props.foreground}00`,
         ]}
-        strokeLinearGradientStartPoint={{ x: 0, y: -cursorBottom + size.height }}
-        strokeLinearGradientEndPoint={{ x: 0, y: -cursorBottom + size.height + props.height }}
-        strokeLinearGradientColorStops={[
-          0.0, `${props.background}00`,
-          0.1, `color-mix(color-mix(${props.foreground} 50%, ${props.background}) 50%, black)`,
-          0.9, `color-mix(color-mix(${props.foreground} 50%, ${props.background}) 50%, black)`,
-          1.0, `${props.background}00`,
-        ]}
-        strokeWidth={2}
-        fillAfterStrokeEnabled
+        // strokeLinearGradientStartPoint={{ x: 0, y: -cursorBottom + size.height }}
+        // strokeLinearGradientEndPoint={{ x: 0, y: -cursorBottom + size.height + props.height }}
+        // strokeLinearGradientColorStops={[
+        //   0.0, `${props.background}00`,
+        //   0.1, `color-mix(color-mix(${props.foreground} 50%, ${props.background}) 50%, black)`,
+        //   0.9, `color-mix(color-mix(${props.foreground} 50%, ${props.background}) 50%, black)`,
+        //   1.0, `${props.background}00`,
+        // ]}
+        // strokeWidth={2}
+        // fillAfterStrokeEnabled
         fontFamily={konvaTemplate.fontFamily()}
         fontSize={konvaTemplate.fontSize()}
         wrap={konvaTemplate.wrap()}
@@ -195,23 +184,27 @@ export default function Display(props: Props) {
     setBvid(null)
   }, [url])
 
-  const getSwatches = (palette?: ColorThief.Color[]) => {
-    // const darkFindIndex = palette?.findIndex((color) => color.isDark) ?? -1
-    // const darkIndex = darkFindIndex !== -1 ? darkFindIndex : (palette?.length ?? 0)
-    // const darkColor = palette?.[darkIndex]?.hex() ?? '#333333'
-    // const lightFindIndex = palette?.findIndex((color) => color.isLight) ?? -1
-    // const lightIndex = lightFindIndex !== -1 ? lightFindIndex : (palette?.length ?? 0)
-    // const lightColor = palette?.[lightIndex]?.hex() ?? '#ffffff'
-    // return darkIndex <= lightIndex ? {
-    //   background: darkColor,
-    //   foreground: lightColor,
-    // } : {
-    //   background: lightColor,
-    //   foreground: darkColor,
-    // }
+  const getSwatches = (palette?: Palette) => {
+    // const toLab = converter('lab')
+    // const diff = differenceCiede2000()
+    // const areClose = (c1: Swatch, c2: Swatch) => rgbDiff(c1.rgb, c2.rgb) < 10
+
+    const colors = [
+      palette?.Vibrant,
+      palette?.Muted,
+      palette?.DarkVibrant,
+      palette?.DarkMuted,
+      palette?.LightVibrant,
+      palette?.LightMuted,
+    ]
+      .filter((color) => !!color)
+      .toSorted((prev, next) => prev.population - next.population)
+    const background = colors.at(-1) ?? new Swatch([51, 51, 51], 0)
+    const foreground = colors.findLast((foreground) => rgbDiff(background.rgb, foreground.rgb) >= 25.0)
+      ?? new Swatch(background.hsl[2] > 0.5 ? [51, 51, 51] : [255, 255, 255], 0)
     return {
-      background: palette?.[0]?.hex() ?? '#333333',
-      foreground: palette?.[1]?.hex() ?? '#ffffff',
+      background: background.hex,
+      foreground: foreground.hex,
     }
   }
 
@@ -232,21 +225,22 @@ export default function Display(props: Props) {
       credentials: 'include',
     }).then((response) => response.json()).then((json) => Promise.all([
       (async () => {
-        const pic = json?.data?.View?.pic ?? null
+        const pic = (json?.data?.View?.pic ?? '') as string
         try {
-          setSwatches(getSwatches(pic ? (await getPalette(pic, 2) ?? undefined) : undefined))
+          setSwatches(getSwatches(pic ? (await Vibrant.from(pic).getPalette() ?? undefined) : undefined))
         } catch {
           setSwatches(getSwatches())
         }
       })(),
       (async () => {
-        const title = json?.data?.View?.title ?? null
-        const text = json?.data?.Tags?.find((tag: any) => tag.tag_type === 'bgm')?.tag_name ?? title
+        const title = (json?.data?.View?.title ?? '') as string
+        const tag = (json?.data?.Tags?.find((tag: any) => tag.tag_type === 'bgm')?.tag_name ?? '') as string
+        // const text = tag ?? title
         // const text = json?.data?.View?.title ?? null
         // console.log(json?.data)
         // const duration = json?.data?.View?.pages?.find((page) => page?.page === p)?.duration ?? null
         try {
-          setSong(text ? await searchSong(text, title, postEapi) : null)
+          setSong(title ? await searchSong([title, tag], title, postEapi) : null)
         } catch {
           setSong(null)
         }
@@ -321,7 +315,7 @@ export default function Display(props: Props) {
   return (
     <ReactKonva.Stage
       width={600}
-      height={400}
+      height={150}
       style={{
         display: 'none',
       }}
@@ -329,27 +323,9 @@ export default function Display(props: Props) {
       <ReactKonva.Layer ref={layer}>
         <ReactKonva.Rect
           width={600}
-          height={400}
+          height={150}
           fill={swatches.background}
         />
-        <ReactKonva.Group
-          x={50}
-          y={50}
-        >
-          <LyricsLines
-            lyrics={song?.lyrics?.original ?? null}
-            currentTime={currentTime}
-            width={500}
-            height={350}
-            lineGap={20}
-            focusOffset={90}
-            jumpTime={0.2}
-            fontSize={40}
-            fontFamily={fontFamily}
-            foreground={swatches.foreground}
-            background={swatches.background}
-          />
-        </ReactKonva.Group>
         <ReactKonva.Text
           text={song?.name ?? ''}
           width={560}
@@ -357,8 +333,8 @@ export default function Display(props: Props) {
           y={20}
           fontSize={20}
           fill={swatches.foreground}
-          stroke={`color-mix(${swatches.foreground} 50%, #000000)`}
-          strokeWidth={2}
+          stroke={`color-mix(${swatches.foreground} 50%, black)`}
+          strokeWidth={1}
           fillAfterStrokeEnabled
           align='left'
           verticalAlign='top'
@@ -371,13 +347,30 @@ export default function Display(props: Props) {
           y={20}
           fontSize={15}
           fill={swatches.foreground}
-          stroke={`color-mix(${swatches.foreground} 50%, #000000)`}
-          strokeWidth={2}
+          stroke={`color-mix(${swatches.foreground} 50%, black)`}
+          strokeWidth={1}
           fillAfterStrokeEnabled
           align='right'
           verticalAlign='top'
           fontFamily={fontFamily}
         />
+        <ReactKonva.Group
+          x={50}
+          y={50}
+        >
+          <LyricsLines
+            lyrics={song?.lyrics?.original ?? null}
+            currentTime={currentTime}
+            width={500}
+            height={100}
+            lineGap={20}
+            focusOffset={30}
+            jumpTime={0.2}
+            fontSize={30}
+            fontFamily={fontFamily}
+            foreground={swatches.foreground}
+          />
+        </ReactKonva.Group>
       </ReactKonva.Layer>
     </ReactKonva.Stage>
   )
