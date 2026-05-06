@@ -4,7 +4,7 @@ import * as ReactKonva from 'react-konva'
 import * as ColorThief from 'colorthief'
 import { Lyrics, SongRecord, searchSong } from './song.ts'
 
-async function getPalette(imageUrl: string) {
+async function getPalette(imageUrl: string, colorCount?: number) {
   const img = new Image()
   img.crossOrigin = 'anonymous'
   img.src = imageUrl
@@ -12,10 +12,10 @@ async function getPalette(imageUrl: string) {
     img.onload = () => resolve()
     img.onerror = reject
   })
-  return await ColorThief.getPalette(img, { colorCount: 6 })
+  return await ColorThief.getPalette(img, { colorCount })
 }
 
-interface LyricsLinesProps {
+function* LyricsLines(props: {
   lyrics: Lyrics | null
   currentTime: number
 
@@ -28,9 +28,8 @@ interface LyricsLinesProps {
   fontSize: number
   fontFamily: string
   foreground: string
-}
-
-function* LyricsLines(props: LyricsLinesProps) {
+  background: string
+}) {
   if (!props.lyrics) {
     return
   }
@@ -59,14 +58,13 @@ function* LyricsLines(props: LyricsLinesProps) {
         : (readProportion * (props.width + size.width) - 0.5 * props.width) / size.width
       )}
       y={cursorMiddle - 0.5 * size.height}
-      // fill={props.foreground}
       fillLinearGradientStartPoint={{ x: 0, y: 0 }}
       fillLinearGradientEndPoint={{ x: 0, y: size.height }}
       fillLinearGradientColorStops={[
         0.0, `color-mix(${props.foreground} 25%, white)`,
         1.0, props.foreground,
       ]}
-      stroke={`color-mix(${props.foreground}, black)`}
+      stroke={`color-mix(${props.foreground} 50%, black)`}
       strokeWidth={3}
       fillAfterStrokeEnabled
       fontFamily={konvaTemplate.fontFamily()}
@@ -91,11 +89,21 @@ function* LyricsLines(props: LyricsLinesProps) {
         fillLinearGradientStartPoint={{ x: 0, y: -cursorTop }}
         fillLinearGradientEndPoint={{ x: 0, y: -cursorTop + props.height }}
         fillLinearGradientColorStops={[
-          0.0, 'transparent',
-          0.2, `color-mix(${props.foreground} 25%, transparent)`,
-          0.8, `color-mix(${props.foreground} 25%, transparent)`,
-          1.0, 'transparent',
+          0.0, `${props.background}`,
+          0.1, `color-mix(${props.foreground} 50%, ${props.background}) 50%`,
+          0.9, `color-mix(${props.foreground} 50%, ${props.background}) 50%`,
+          1.0, `${props.background}`,
         ]}
+        strokeLinearGradientStartPoint={{ x: 0, y: -cursorTop }}
+        strokeLinearGradientEndPoint={{ x: 0, y: -cursorTop + props.height }}
+        strokeLinearGradientColorStops={[
+          0.0, `${props.background}00`,
+          0.1, `color-mix(color-mix(${props.foreground} 50%, ${props.background}) 50%, black)`,
+          0.9, `color-mix(color-mix(${props.foreground} 50%, ${props.background}) 50%, black)`,
+          1.0, `${props.background}00`,
+        ]}
+        strokeWidth={2}
+        fillAfterStrokeEnabled
         fontFamily={konvaTemplate.fontFamily()}
         fontSize={konvaTemplate.fontSize()}
         wrap={konvaTemplate.wrap()}
@@ -120,11 +128,21 @@ function* LyricsLines(props: LyricsLinesProps) {
         fillLinearGradientStartPoint={{ x: 0, y: -cursorBottom + size.height }}
         fillLinearGradientEndPoint={{ x: 0, y: -cursorBottom + size.height + props.height }}
         fillLinearGradientColorStops={[
-          0.0, 'transparent',
-          0.2, `color-mix(${props.foreground} 25%, transparent)`,
-          0.8, `color-mix(${props.foreground} 25%, transparent)`,
-          1.0, 'transparent',
+          0.0, `${props.background}`,
+          0.1, `color-mix(${props.foreground} 50%, ${props.background}) 50%`,
+          0.9, `color-mix(${props.foreground} 50%, ${props.background}) 50%`,
+          1.0, `${props.background}`,
         ]}
+        strokeLinearGradientStartPoint={{ x: 0, y: -cursorBottom + size.height }}
+        strokeLinearGradientEndPoint={{ x: 0, y: -cursorBottom + size.height + props.height }}
+        strokeLinearGradientColorStops={[
+          0.0, `${props.background}00`,
+          0.1, `color-mix(color-mix(${props.foreground} 50%, ${props.background}) 50%, black)`,
+          0.9, `color-mix(color-mix(${props.foreground} 50%, ${props.background}) 50%, black)`,
+          1.0, `${props.background}00`,
+        ]}
+        strokeWidth={2}
+        fillAfterStrokeEnabled
         fontFamily={konvaTemplate.fontFamily()}
         fontSize={konvaTemplate.fontSize()}
         wrap={konvaTemplate.wrap()}
@@ -135,7 +153,6 @@ function* LyricsLines(props: LyricsLinesProps) {
 }
 
 interface Props {
-  bvid: string | null
   setAppVisible: React.Dispatch<React.SetStateAction<boolean>>
   setCanvas: React.Dispatch<React.SetStateAction<HTMLCanvasElement | null>>
 }
@@ -147,54 +164,94 @@ export default function Display(props: Props) {
     props.setCanvas(layer.current?.getNativeCanvasElement() ?? null)
   }, [])
 
-  const getSwatches = (palette: ColorThief.Color[] | null) => {
-    const darkFindIndex = palette?.findIndex((color) => color.isDark) ?? -1
-    const darkIndex = darkFindIndex !== -1 ? darkFindIndex : (palette?.length ?? 0)
-    const darkColor = palette?.[darkIndex]?.hex() ?? '#333333'
-    const lightFindIndex = palette?.findIndex((color) => color.isLight) ?? -1
-    const lightIndex = lightFindIndex !== -1 ? lightFindIndex : (palette?.length ?? 0)
-    const lightColor = palette?.[lightIndex]?.hex() ?? '#ffffff'
-    return darkIndex <= lightIndex ? {
-      background: darkColor,
-      foreground: lightColor,
-    } : {
-      background: lightColor,
-      foreground: darkColor,
+  const [url, setUrl] = React.useState(window.location.href)
+  React.useEffect(() => {
+    let last = window.location.href
+
+    const observer = new MutationObserver(async () => {
+      const current = window.location.href
+      if (current !== last) {
+        last = current
+        setUrl(current)
+      }
+    })
+    observer.observe(document, { subtree: true, childList: true })
+    return () => {
+      observer.disconnect()
+    }
+  }, [])
+
+  const [bvid, setBvid] = React.useState<string | null>(null)
+  React.useEffect(() => {
+    const urlObject = new URL(url)
+    if (urlObject.pathname.startsWith('/video/')) {
+      setBvid(urlObject.pathname.split('/')[2] ?? null)
+      return
+    }
+    if (urlObject.pathname.startsWith('/list/')) {
+      setBvid(urlObject.searchParams.get('bvid'))
+      return
+    }
+    setBvid(null)
+  }, [url])
+
+  const getSwatches = (palette?: ColorThief.Color[]) => {
+    // const darkFindIndex = palette?.findIndex((color) => color.isDark) ?? -1
+    // const darkIndex = darkFindIndex !== -1 ? darkFindIndex : (palette?.length ?? 0)
+    // const darkColor = palette?.[darkIndex]?.hex() ?? '#333333'
+    // const lightFindIndex = palette?.findIndex((color) => color.isLight) ?? -1
+    // const lightIndex = lightFindIndex !== -1 ? lightFindIndex : (palette?.length ?? 0)
+    // const lightColor = palette?.[lightIndex]?.hex() ?? '#ffffff'
+    // return darkIndex <= lightIndex ? {
+    //   background: darkColor,
+    //   foreground: lightColor,
+    // } : {
+    //   background: lightColor,
+    //   foreground: darkColor,
+    // }
+    return {
+      background: palette?.[0]?.hex() ?? '#333333',
+      foreground: palette?.[1]?.hex() ?? '#ffffff',
     }
   }
 
-  const [swatches, setSwatches] = React.useState(getSwatches(null))
-  const song = React.useRef<SongRecord | null>(null)
+  const postEapi = (path: string, body: any) => chrome.runtime.sendMessage({ path, body })
+  const [swatches, setSwatches] = React.useState(getSwatches)
+  const [song, setSong] = React.useState<SongRecord | null>(null)
   React.useEffect(() => {
-    if (!props.bvid) {
+    // const urlObject = new URL(url)
+    // const bvid = urlObject.pathname.startsWith('/video/') ? urlObject.pathname.split('/')[2]
+    //   : urlObject.pathname.startsWith('/list/') ? urlObject.searchParams.get('bvid') : null
+    // const p = parseInt(urlObject.searchParams.get('p') ?? '1')
+
+    if (!bvid) {
       return
     }
-    fetch(`https://api.bilibili.com/x/web-interface/view/detail?bvid=${props.bvid}`, {
+    fetch(`https://api.bilibili.com/x/web-interface/view/detail?bvid=${bvid}`, {
       method: 'GET',
       credentials: 'include',
     }).then((response) => response.json()).then((json) => Promise.all([
       (async () => {
         const pic = json?.data?.View?.pic ?? null
         try {
-          setSwatches(getSwatches(pic ? await getPalette(pic) : null))
+          setSwatches(getSwatches(pic ? (await getPalette(pic, 2) ?? undefined) : undefined))
         } catch {
-          setSwatches(getSwatches(null))
+          setSwatches(getSwatches())
         }
       })(),
       (async () => {
-        const tagName = json?.data?.Tags?.find((tag: any) => tag.tag_type === 'bgm')?.tag_name ?? ''
-        const keyword = /^发现《(.+?)(?:\s*\(.+\))?》$/g.exec(tagName)?.[1].trim() ?? tagName
+        // const text = json?.data?.Tags?.find((tag: any) => tag.tag_type === 'bgm')?.tag_name ?? json?.data?.View?.title ?? null
+        const text = json?.data?.View?.title ?? null
+        // console.log(json?.data)
+        // const duration = json?.data?.View?.pages?.find((page) => page?.page === p)?.duration ?? null
         try {
-          song.current = keyword ? await searchSong(
-            keyword,
-            (path: string, body: any) => chrome.runtime.sendMessage({ path, body }),
-          ) : null
+          setSong(text ? await searchSong(text, postEapi) : null)
         } catch {
-          song.current = null
+          setSong(null)
         }
       })()
     ]))
-  }, [props.bvid])
+  }, [bvid])
 
   const media = (() => {
     const mediaRef = React.useRef<HTMLVideoElement | null>(null)
@@ -209,12 +266,17 @@ export default function Display(props: Props) {
 
   const [currentTime, setCurrentTime] = React.useState(0.0)
   const byteFrequencyData = React.useRef<Uint8Array | null>(null)
+  // const arr = React.useRef([])
   React.useEffect(() => {
     if (!media) {
       return
     }
     const audioCtx = new AudioContext()
     const source = audioCtx.createMediaElementSource(media)
+    // console.log("includes?:", arr.current.includes(media))
+    // if (!arr.current.includes(media)) {
+    //   arr.current.push(media)
+    // }
     const analyser = audioCtx.createAnalyser()
     analyser.fftSize = 1 << 6
     source.connect(analyser)
@@ -240,10 +302,25 @@ export default function Display(props: Props) {
     }
   }, [media])
 
+  const fontFamilyMap = new Map([
+    ['zh', 'Source Han Serif SC VF, serif'],
+    ['jp', 'Source Han Serif JP VF, Source Han Serif SC VF, serif'],
+    ['en', 'Georgia, Source Han Serif SC VF, serif'],
+  ])
+  const [fontFamily, setFontFamily] = React.useState('Source Han Serif SC VF, serif')
+  React.useEffect(() => {
+    song?.lyrics?.original?.detectLanguage().then((lang) => {
+      const fontFamily = fontFamilyMap.get(lang)
+      if (fontFamily) {
+        setFontFamily(fontFamily)
+      }
+    })
+  }, [song])
+
   return (
     <ReactKonva.Stage
       width={600}
-      height={200}
+      height={400}
       style={{
         display: 'none',
       }}
@@ -251,7 +328,7 @@ export default function Display(props: Props) {
       <ReactKonva.Layer ref={layer}>
         <ReactKonva.Rect
           width={600}
-          height={200}
+          height={400}
           fill={swatches.background}
         />
         <ReactKonva.Group
@@ -259,39 +336,46 @@ export default function Display(props: Props) {
           y={50}
         >
           <LyricsLines
-            lyrics={song.current?.lyrics?.original ?? null}
+            lyrics={song?.lyrics?.original ?? null}
             currentTime={currentTime}
             width={500}
-            height={150}
+            height={350}
             lineGap={20}
-            focusOffset={60}
-            jumpTime={0.1}
+            focusOffset={90}
+            jumpTime={0.2}
             fontSize={40}
-            fontFamily={'Source Han Serif JP VF, Source Han Serif SC VF'}
+            fontFamily={fontFamily}
             foreground={swatches.foreground}
+            background={swatches.background}
           />
         </ReactKonva.Group>
         <ReactKonva.Text
-          text={song.current?.name ?? ''}
+          text={song?.name ?? ''}
           width={560}
           x={20}
           y={20}
           fontSize={20}
           fill={swatches.foreground}
+          stroke={`color-mix(${swatches.foreground} 50%, #000000)`}
+          strokeWidth={2}
+          fillAfterStrokeEnabled
           align='left'
           verticalAlign='top'
-          fontFamily={'Source Han Serif JP VF, Source Han Serif SC VF'}
+          fontFamily={fontFamily}
         />
         <ReactKonva.Text
-          text={song.current?.artists?.join('・') ?? ''}
+          text={song?.artists?.join(' | ') ?? ''}
           width={560}
           x={20}
           y={20}
           fontSize={15}
           fill={swatches.foreground}
+          stroke={`color-mix(${swatches.foreground} 50%, #000000)`}
+          strokeWidth={2}
+          fillAfterStrokeEnabled
           align='right'
           verticalAlign='top'
-          fontFamily={'Source Han Serif JP VF, Source Han Serif SC VF'}
+          fontFamily={fontFamily}
         />
       </ReactKonva.Layer>
     </ReactKonva.Stage>

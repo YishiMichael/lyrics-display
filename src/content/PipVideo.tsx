@@ -26,19 +26,6 @@ export default function PipVideo(props: Props) {
   }
 
   React.useEffect(() => {
-    if (!props.canvas || !ref.current) {
-      return
-    }
-    const stream = props.canvas.captureStream()
-    ref.current.srcObject = stream
-    return () => {
-      stream.getTracks().forEach((track) => {
-        track.stop()
-      })
-    }
-  }, [props.canvas])
-
-  React.useEffect(() => {
     const handleClose = async () => {
       await close()
       props.setPipVisible(false)
@@ -57,6 +44,19 @@ export default function PipVideo(props: Props) {
       close()
     }
   }, [props.pipVisible])
+
+  React.useEffect(() => {
+    if (!props.canvas || !ref.current) {
+      return
+    }
+    const stream = props.canvas.captureStream()
+    ref.current.srcObject = stream
+    return () => {
+      stream.getTracks().forEach((track) => {
+        track.stop()
+      })
+    }
+  }, [props.canvas])
 
   return (
     <video

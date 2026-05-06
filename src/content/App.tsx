@@ -122,44 +122,7 @@ function useDraggableElement<T extends HTMLElement>(initialAbsPos: AbsolutePosit
   return { absPos, ref, onMouseDownDrag }
 }
 
-function useUrl() {
-  const urlRef = React.useRef(window.location.href)
-
-  React.useEffect(() => {
-    let last = window.location.href
-
-    const observer = new MutationObserver(async () => {
-      const current = window.location.href
-      if (current !== last) {
-        last = current
-        urlRef.current = current
-      }
-    })
-    observer.observe(document, { subtree: true, childList: true })
-    return () => {
-      observer.disconnect()
-    }
-  }, [])
-
-  return urlRef.current
-}
-
 export default function App() {
-  const url = useUrl()
-  const [bvid, setBvid] = React.useState<string | null>(null)
-  React.useEffect(() => {
-    const urlObject = new URL(url)
-    if (urlObject.pathname.startsWith('/video/')) {
-      setBvid(urlObject.pathname.split('/')[2] ?? null)
-      return
-    }
-    if (urlObject.pathname.startsWith('/list/')) {
-      setBvid(urlObject.searchParams.get('bvid'))
-      return
-    }
-    setBvid(null)
-  }, [url])
-
   const [appVisible, setAppVisible] = React.useState(false)
   const [pipVisible, setPipVisible] = React.useState(false)
   const [settingsVisible, setSettingsVisible] = React.useState(false)
@@ -199,7 +162,6 @@ export default function App() {
           settingsVisible={settingsVisible}
         />
         <Display
-          bvid={bvid}
           setAppVisible={setAppVisible}
           setCanvas={setCanvas}
         />
