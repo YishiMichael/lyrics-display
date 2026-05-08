@@ -49,7 +49,7 @@ function useElementSize<T extends HTMLElement>() {
       width: Math.trunc(rect.width),
       height: Math.trunc(rect.height),
     })
-  }, [])
+  }, [ref.current])
 
   return { size, ref }
 }
@@ -161,15 +161,23 @@ export default function App() {
         <Settings
           settingsVisible={settingsVisible}
         />
-        <Display
-          setAppVisible={setAppVisible}
-          setCanvas={setCanvas}
-        />
-        <PipVideo
-          canvas={canvas}
-          pipVisible={pipVisible}
-          setPipVisible={setPipVisible}
-        />
+        <div style={{
+          display: 'none',
+        }}>
+          <Display
+            setAppVisible={setAppVisible}
+            setCanvas={setCanvas}
+          />
+        </div>
+        <div style={{
+          display: 'none',
+        }}>
+          <PipVideo
+            canvas={canvas}
+            pipVisible={pipVisible}
+            setPipVisible={setPipVisible}
+          />
+        </div>
       </div>
     </div>
   )

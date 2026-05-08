@@ -5,13 +5,27 @@ import { Palette, Swatch, rgbDiff } from '@vibrant/color'
 import { Vibrant } from 'node-vibrant/browser'
 import { Lyrics, SongRecord, searchSong } from './song.ts'
 
+function useMonitoring<T>(callback: () => T) {
+  const data = React.useRef(callback())
+  React.useEffect(() => {
+    const observer = new MutationObserver(() => {
+      data.current = callback()
+    })
+    observer.observe(document, { subtree: true, childList: true })
+    return () => {
+      observer.disconnect()
+    }
+  }, [])
+  return data.current
+}
+
 function* LyricsLines(props: {
   lyrics: Lyrics | null
   currentTime: number
 
   width: number
   height: number
-  lineGap: number
+  lineSpacing: number
   focusOffset: number
   jumpTime: number
 
@@ -36,7 +50,7 @@ function* LyricsLines(props: {
 
   const text = props.lyrics.getTextByIndex(span.index) ?? ''
   const size = konvaTemplate.measureSize(text)
-  const cursorMiddle = props.focusOffset + jumpProportion * (size.height + props.lineGap)
+  const cursorMiddle = props.focusOffset * props.height + jumpProportion * (size.height + props.lineSpacing * props.fontSize)
   yield (
     <ReactKonva.Text
       key={0}
@@ -62,7 +76,7 @@ function* LyricsLines(props: {
     />
   )
 
-  let cursorTop = cursorMiddle + 0.5 * size.height + props.lineGap
+  let cursorTop = cursorMiddle + 0.5 * size.height + props.lineSpacing * props.fontSize
   for (let indexOffset = 1;; ++indexOffset) {
     if (cursorTop >= props.height) {
       break
@@ -98,10 +112,10 @@ function* LyricsLines(props: {
         wrap={konvaTemplate.wrap()}
       />
     )
-    cursorTop += size.height + props.lineGap
+    cursorTop += size.height + props.lineSpacing * props.fontSize
   }
 
-  let cursorBottom = cursorMiddle - 0.5 * size.height - props.lineGap
+  let cursorBottom = cursorMiddle - 0.5 * size.height - props.lineSpacing * props.fontSize
   for (let indexOffset = -1;; --indexOffset) {
     if (cursorBottom <= 0.0) {
       break
@@ -137,14 +151,44 @@ function* LyricsLines(props: {
         wrap={konvaTemplate.wrap()}
       />
     )
-    cursorBottom -= size.height + props.lineGap
+    cursorBottom -= size.height + props.lineSpacing * props.fontSize
   }
+}
+
+function* AudioSpectrumBars(props: {
+  values: Uint8Array
+  width: number
+  height: number
+  proportion: number
+  foreground: string
+}) {
+  for (let index = 0; index < props.values.length; ++index) {
+    const value = props.values[index] / 255.0
+    yield (
+      <ReactKonva.Rect
+        width={props.width / props.values.length * props.proportion}
+        height={value * props.height}
+        x={(index + 0.5 * (1.0 - props.proportion)) * props.width / props.values.length}
+        y={(1.0 - value) * props.height}
+        fill={`${props.foreground}33`}
+      />
+    )
+  }
+  // return props.values.map((value, index, array) => {
+  //   return 
+  // })
 }
 
 interface Props {
   setAppVisible: React.Dispatch<React.SetStateAction<boolean>>
   setCanvas: React.Dispatch<React.SetStateAction<HTMLCanvasElement | null>>
 }
+
+const audioCtx = new AudioContext()
+const analyser = audioCtx.createAnalyser()
+analyser.fftSize = 1 << 6
+analyser.connect(audioCtx.destination)
+const sourceMap: WeakMap<HTMLMediaElement, MediaElementAudioSourceNode> = new WeakMap()
 
 export default function Display(props: Props) {
   const layer = React.useRef<Konva.Layer | null>(null)
@@ -153,25 +197,11 @@ export default function Display(props: Props) {
     props.setCanvas(layer.current?.getNativeCanvasElement() ?? null)
   }, [])
 
-  const [url, setUrl] = React.useState(window.location.href)
-  React.useEffect(() => {
-    let last = window.location.href
-
-    const observer = new MutationObserver(async () => {
-      const current = window.location.href
-      if (current !== last) {
-        last = current
-        setUrl(current)
-      }
-    })
-    observer.observe(document, { subtree: true, childList: true })
-    return () => {
-      observer.disconnect()
-    }
-  }, [])
+  const url = useMonitoring(() => window.location.href)
 
   const [bvid, setBvid] = React.useState<string | null>(null)
   React.useEffect(() => {
+    console.log("url updated", url)
     const urlObject = new URL(url)
     if (urlObject.pathname.startsWith('/video/')) {
       setBvid(urlObject.pathname.split('/')[2] ?? null)
@@ -227,7 +257,7 @@ export default function Display(props: Props) {
       (async () => {
         const pic = (json?.data?.View?.pic ?? '') as string
         try {
-          setSwatches(getSwatches(pic ? (await Vibrant.from(pic).getPalette() ?? undefined) : undefined))
+          setSwatches(getSwatches(pic ? await Vibrant.from(pic).getPalette() : undefined))
         } catch {
           setSwatches(getSwatches())
         }
@@ -240,7 +270,7 @@ export default function Display(props: Props) {
         // console.log(json?.data)
         // const duration = json?.data?.View?.pages?.find((page) => page?.page === p)?.duration ?? null
         try {
-          setSong(title ? await searchSong([title, tag], title, postEapi) : null)
+          setSong(await searchSong([title, tag], postEapi))
         } catch {
           setSong(null)
         }
@@ -248,52 +278,62 @@ export default function Display(props: Props) {
     ]))
   }, [bvid])
 
-  const media = (() => {
-    const mediaRef = React.useRef<HTMLVideoElement | null>(null)
-    React.useEffect(() => {
-      if (mediaRef.current) {
-        return
-      }
-      mediaRef.current = document.getElementById('bilibili-player')?.getElementsByTagName('video').item(0) ?? null
-    }, [])
-    return mediaRef.current
-  })()
+  const media = useMonitoring(() => document.getElementById('bilibili-player')?.getElementsByTagName('video').item(0) ?? null)
+
+  React.useEffect(() => {
+    props.setAppVisible(!!media)
+    return () => {
+      props.setAppVisible(false)
+    }
+  }, [media])
 
   const [currentTime, setCurrentTime] = React.useState(0.0)
-  const byteFrequencyData = React.useRef<Uint8Array | null>(null)
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      if (media && !media.paused) {
+        setCurrentTime(media?.currentTime ?? 0.0)
+      }
+    }, 1000 / 60)
+    return () => {
+      clearInterval(interval)
+    }
+  }, [])
+
+  const source = React.useRef<MediaElementAudioSourceNode | null>(null)
+  const byteFrequencyData = React.useRef(new Uint8Array(analyser.frequencyBinCount))
   // const arr = React.useRef([])
   React.useEffect(() => {
     if (!media) {
       return
     }
-    const audioCtx = new AudioContext()
-    const source = audioCtx.createMediaElementSource(media)
+    source.current = sourceMap.get(media) ?? null
+    if (!source.current) {
+      source.current = audioCtx.createMediaElementSource(media)
+      sourceMap.set(media, source.current)
+    }
+    // const source = sourceMap.get(media)!
     // console.log("includes?:", arr.current.includes(media))
     // if (!arr.current.includes(media)) {
     //   arr.current.push(media)
     // }
-    const analyser = audioCtx.createAnalyser()
-    analyser.fftSize = 1 << 6
-    source.connect(analyser)
-    analyser.connect(audioCtx.destination)
-    const dataArray = new Uint8Array(analyser.frequencyBinCount)
-    byteFrequencyData.current = dataArray
-    const currentTimeInterval = setInterval(() => {
-      setCurrentTime(media?.currentTime ?? 0.0)
-    })
-    const byteFrequencyDataInterval = setInterval(() => {
-      analyser.getByteFrequencyData(dataArray)
-    }, 100)
-    props.setAppVisible(true)
+    source.current.connect(analyser)
+    // byteFrequencyData.current = dataArray
+    
+    const interval = setInterval(() => {
+      analyser.getByteFrequencyData(byteFrequencyData.current)
+    }, 10)
+    // props.setAppVisible(true)
     return () => {
-      setCurrentTime(0.0)
-      byteFrequencyData.current = null
-      source.disconnect()
-      analyser.disconnect()
-      audioCtx.close()
-      clearInterval(currentTimeInterval)
-      clearInterval(byteFrequencyDataInterval)
-      props.setAppVisible(false)
+      // setCurrentTime(0.0)
+      // byteFrequencyData.current = null
+      if (source.current) {
+        source.current.disconnect()
+        source.current = null
+      }
+      // analyser.disconnect()
+      // audioCtx.close()
+      clearInterval(interval)
+      // props.setAppVisible(false)
     }
   }, [media])
 
@@ -316,9 +356,6 @@ export default function Display(props: Props) {
     <ReactKonva.Stage
       width={600}
       height={150}
-      style={{
-        display: 'none',
-      }}
     >
       <ReactKonva.Layer ref={layer}>
         <ReactKonva.Rect
@@ -334,7 +371,7 @@ export default function Display(props: Props) {
           fontSize={20}
           fill={swatches.foreground}
           stroke={`color-mix(${swatches.foreground} 50%, black)`}
-          strokeWidth={1}
+          strokeWidth={0}
           fillAfterStrokeEnabled
           align='left'
           verticalAlign='top'
@@ -348,7 +385,7 @@ export default function Display(props: Props) {
           fontSize={15}
           fill={swatches.foreground}
           stroke={`color-mix(${swatches.foreground} 50%, black)`}
-          strokeWidth={1}
+          strokeWidth={0}
           fillAfterStrokeEnabled
           align='right'
           verticalAlign='top'
@@ -363,11 +400,23 @@ export default function Display(props: Props) {
             currentTime={currentTime}
             width={500}
             height={100}
-            lineGap={20}
-            focusOffset={30}
+            lineSpacing={0.6}
+            focusOffset={0.3}
             jumpTime={0.2}
             fontSize={30}
             fontFamily={fontFamily}
+            foreground={swatches.foreground}
+          />
+        </ReactKonva.Group>
+        <ReactKonva.Group
+          x={0}
+          y={50}
+        >
+          <AudioSpectrumBars
+            values={byteFrequencyData.current}
+            width={600}
+            height={100}
+            proportion={0.4}
             foreground={swatches.foreground}
           />
         </ReactKonva.Group>

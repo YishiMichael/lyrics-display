@@ -83,138 +83,140 @@ export interface SongRecord {
   },
 }
 
-export async function searchSong(texts: string[], matcher: string, postEapi: (path: string, body: any) => Promise<any>) {
+export async function searchSong(texts: string[], postEapi: (path: string, body: any) => Promise<any>) {
   const splitSegments = (text: string) => Array.from(text.normalize('NFKC').toLowerCase().matchAll(/[\p{L}|\p{N}]+/gu)).map((g) => g[0])
 
-  const searchSongByText = async (text: string) => {
-    const keyword = splitSegments((
-      /\u300a(.*?)\u300b/g.exec(text)?.[1].trim() ||
-      /\u300e(.*?)\u300f/g.exec(text)?.[1].trim() ||
-      /\u300c(.*?)\u300d/g.exec(text)?.[1].trim() ||
-      text
-    )
-      .replaceAll(/\u3010.*?\u3011/g, '')
-      .replaceAll(/\uff08.*?\uff09/g, '')
-      .replaceAll(/\(.*?\)/g, '')
-      .replaceAll(/\bfeat\..+/g, '')
-      .replaceAll(/\bvo\..+/g, '')
-      .replaceAll(/\/.+/g, '')
-      .trim()
-    ).join(' ')
-    const matcherSegments = splitSegments(
-      matcher
+  const segments = new Set(texts.flatMap((text) => splitSegments(
+    text
       .replaceAll(/\bfeat\./g, '')
       .replaceAll(/\bvo\./g, '')
-    )
-
-    const searchResponse = await postEapi('cloudsearch/pc', {
-      s: keyword,
-      type: 1,
-      limit: 10,
-    })
-    return (searchResponse?.result?.songs as any[] | undefined)
-      ?.map((song) => {
-        // console.log(song)
-        const id = song?.id as number | undefined
-        const name = song?.name as string | undefined
-        const ar = song?.ar as any[] | undefined
-        const dt = song?.dt as number | undefined
-        const pop = song?.pop as number | undefined
-        const alia = song?.alia as string[] | undefined
-        const tns = song?.tns as string[] | undefined
-        const originCoverType = song?.originCoverType as number | undefined
-        if (id === undefined || name === undefined || ar === undefined || dt === undefined || pop === undefined) {
+  )))
+  const song = (await Promise.all(
+    texts
+      .map((text) => splitSegments(
+        (
+          /\u300a(.*?)\u300b/g.exec(text)?.[1].trim() ||
+          /\u300e(.*?)\u300f/g.exec(text)?.[1].trim() ||
+          /\u300c(.*?)\u300d/g.exec(text)?.[1].trim() ||
+          text
+        )
+          .replaceAll(/\u3010.*?\u3011/g, '')
+          .replaceAll(/\uff08.*?\uff09/g, '')
+          .replaceAll(/\(.*?\)/g, '')
+          .replaceAll(/\bfeat\..+/g, '')
+          .replaceAll(/\bvo\..+/g, '')
+          .replaceAll(/\/.+/g, '')
+          .trim()
+      ).join(' '))
+      .filter((keyword) => keyword)
+      .flatMap((keyword) => postEapi('cloudsearch/pc', {
+        s: keyword,
+        type: 1,
+        limit: 10,
+      }))
+  ))
+    .map((searchResponse): any[] | undefined => searchResponse?.result?.songs)
+    .flatMap((songs) => songs ?? [])
+    .map((song) => {
+      // console.log(song)
+      const id = song.id as number | undefined
+      const name = song.name as string | undefined
+      const ar = song.ar as any[] | undefined
+      const dt = song.dt as number | undefined
+      const pop = song.pop as number | undefined
+      const alia = song.alia as string[] | undefined
+      const tns = song.tns as string[] | undefined
+      const originCoverType = song.originCoverType as number | undefined
+      if (!id || !name || !ar || !dt || !pop) {
+        return undefined
+      }
+      const artists = ar.map((artist) => {
+        const name = artist?.name as string | undefined
+        const alia = artist?.alia as string[] | undefined
+        const alias = artist?.alias as string[] | undefined
+        const tns = artist?.tns as string[] | undefined
+        if (!name) {
           return undefined
         }
-        const artists = ar.map((artist) => {
-          const name = artist?.name as string | undefined
-          const alia = artist?.alia as string[] | undefined
-          const alias = artist?.alias as string[] | undefined
-          const tns = artist?.tns as string[] | undefined
-          if (name === undefined) {
-            return undefined
-          }
-          return { name, alia, alias, tns }
-        }).filter((artist) => !!artist)
-        return { id, name, artists, dt, pop, alia, tns, originCoverType }
-      })
-      ?.map((song) => {
-        if (!song) {
-          return
-        }
-        const remainingSegments = new Set(matcherSegments)
-        const artistsMatches = song.artists.filter((artist) => [
-            artist.name,
-            ...artist.alia ?? [],
-            ...artist.alias ?? [],
-            ...artist.tns ?? []
-          ]
-            .map((artist) => splitSegments(artist).filter((segment) => remainingSegments.has(segment)))
-            .reduce((previous, current) => current.length > previous.length ? current : previous)
-            .map((segment) => remainingSegments.delete(segment))
-            .length
-        ).length
-        const nameMatches = [
-          song.name,
-          ...song.alia ?? [],
-          ...song.tns ?? [],
+        return { name, alia, alias, tns }
+      }).filter((artist) => !!artist)
+      return { id, name, artists, dt, pop, alia, tns, originCoverType }
+    })
+    .map((song) => {
+      if (!song) {
+        return
+      }
+      const remainingSegments = new Set(segments)
+      const artistsMatches = song.artists.filter((artist) => [
+          artist.name,
+          ...artist.alia ?? [],
+          ...artist.alias ?? [],
+          ...artist.tns ?? []
         ]
-          .map((name) => splitSegments(name).filter((segment) => remainingSegments.has(segment)))
+          .map((artist) => splitSegments(artist).filter((segment) => remainingSegments.has(segment)))
           .reduce((previous, current) => current.length > previous.length ? current : previous)
           .map((segment) => remainingSegments.delete(segment))
           .length
-        console.log({
-          id: song.id,
-          name: song.name,
-          artists: song.artists.map((artist) => artist.name),
-          duration: song.dt / 1000,
-          score: {
-            matches: nameMatches + artistsMatches,
-            artistsMatches,
-            mismatches: remainingSegments.size,
-            pop: song.pop,
-          },
-          song: song.originCoverType,
-        })
-        if (!(nameMatches + artistsMatches)) {
-          return undefined
-        }
-        if (song.originCoverType !== 1 && !artistsMatches) {
-          return undefined
-        }
-        return {
-          id: song.id,
-          name: song.name,
-          artists: song.artists.map((artist) => artist.name),
-          duration: song.dt / 1000,
-          score: {
-            matches: nameMatches + artistsMatches,
-            artistsMatches,
-            mismatches: remainingSegments.size,
-            pop: song.pop,
-          },
-        }
-      })
-      ?.filter((song) => !!song)
-      ?.reduce((previous, current) => (
-        current.score.matches !== previous.score.matches ? current.score.matches > previous.score.matches :
-        current.score.artistsMatches !== previous.score.artistsMatches ? current.score.artistsMatches > previous.score.artistsMatches :
-        current.score.mismatches !== previous.score.mismatches ? current.score.mismatches < previous.score.mismatches :
-        current.score.pop > previous.score.pop
-      ) ? current : previous)
-  }
-
-  const searchSongByTexts = async (texts: string[]) => {
-    for (const text of texts) {
-      const song = await searchSongByText(text)
-      if (song) {
-        return song
+      ).length
+      const nameMatches = [
+        song.name,
+        ...song.alia ?? [],
+        ...song.tns ?? [],
+      ]
+        .map((name) => splitSegments(name).filter((segment) => remainingSegments.has(segment)))
+        .reduce((previous, current) => current.length > previous.length ? current : previous)
+        .map((segment) => remainingSegments.delete(segment))
+        .length
+      // console.log({
+      //   id: song.id,
+      //   name: [
+      //     song.name,
+      //     ...song.alia ?? [],
+      //     ...song.tns ?? [],
+      //   ],
+      //   artists: song.artists.map((artist) => [
+      //     artist.name,
+      //     ...artist.alia ?? [],
+      //     ...artist.alias ?? [],
+      //     ...artist.tns ?? []
+      //   ]),
+      //   duration: song.dt / 1000,
+      //   score: {
+      //     matches: nameMatches + artistsMatches,
+      //     artistsMatches,
+      //     mismatches: remainingSegments.size,
+      //     pop: song.pop,
+      //   },
+      //   originCoverType: song.originCoverType,
+      // })
+      if (!(nameMatches + artistsMatches)) {
+        return undefined
       }
-    }
-    return null
-  }
+      if (song.originCoverType !== 1 && !artistsMatches) {
+        return undefined
+      }
+      return {
+        id: song.id,
+        name: song.name,
+        artists: song.artists.map((artist) => artist.name),
+        duration: song.dt / 1000,
+        score: {
+          matches: nameMatches + artistsMatches,
+          artistsMatches,
+          mismatches: remainingSegments.size,
+          pop: song.pop,
+        },
+      }
+    })
+    .filter((song) => !!song)
+    .reduce((previous, current) => (
+      current.score.matches !== previous.score.matches ? current.score.matches > previous.score.matches :
+      current.score.artistsMatches !== previous.score.artistsMatches ? current.score.artistsMatches > previous.score.artistsMatches :
+      current.score.mismatches !== previous.score.mismatches ? current.score.mismatches < previous.score.mismatches :
+      current.score.pop > previous.score.pop
+    ) ? current : previous)
 
-  const song = await searchSongByTexts(texts)
+  // console.log("Selected:", song)
   if (!song) {
     return null
   }
