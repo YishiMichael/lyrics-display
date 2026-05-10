@@ -279,7 +279,7 @@ export default function Display(props: Props) {
       })(),
       (async () => {
         const title = (json?.data?.View?.title ?? '') as string
-        const owner = (json?.data?.View?.owner?.name ?? '') as string
+        const staffs = (json?.data?.View?.staff?.map((staff: any) => staff?.name ?? '') ?? [json?.data?.View?.owner?.name ?? '']) as string[]
         const tags = ((json?.data?.Tags as any[] | undefined)?.map((tag: any) => {
           const type = tag?.tag_type as string | undefined
           const name = tag?.tag_name as string | undefined
@@ -296,9 +296,9 @@ export default function Display(props: Props) {
         const duration = json?.data?.View?.pages?.find((pageInfo: any) => pageInfo?.page === (page ?? 1))?.duration ?? null
         try {
           setSong(await searchSong({
-            texts: [title, ...bgmTags],
-            candidates: [title, owner, ...bgmTags, ...channelTags],
-            title: title,
+            titles: [title, ...bgmTags],
+            staffs,
+            tags: channelTags,
             targetDuration: duration,
             postEapi,
           }))

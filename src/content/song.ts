@@ -49,7 +49,7 @@ export class Lyrics {
       const stopTime = getTimeByIndex(index + 1)
       return (startTime === null || startTime <= time) && (stopTime === null || time < stopTime) ? {
         index,
-        startTime: startTime === null ? (this.lines[0].time ?? this.duration) : startTime,
+        startTime: startTime === null ? (this.lines[0]?.time ?? this.duration) : startTime,
         stopTime: stopTime === null ? this.duration : stopTime,
       } : null
     }
@@ -65,7 +65,7 @@ export class Lyrics {
     }
     return {
       index: 0,
-      startTime: this.lines[0].time ?? this.duration,
+      startTime: this.lines[0]?.time ?? this.duration,
       stopTime: this.duration,
     }
   }
@@ -85,38 +85,26 @@ export interface SongRecord {
   },
 }
 
-// TODO: remove
-// function dedupBy<T, K>(input: T[], keyFn: (item: T) => K): T[] {
-//   const seen = new Set<K>()
-//   return input.filter((item) => {
-//     const key = keyFn(item)
-//     if (seen.has(key)) {
-//       return false
-//     }
-//     seen.add(key)
-//     return true
-//   })
-// }
-
-// function dedup<T>(input: T[]): T[] {
-//   return dedupBy(input, (data) => data)
-// }
-
 interface SearchSongOptions {
-  texts: string[]
-  candidates: string[]
-  title: string | null
+  titles: string[]
+  staffs: string[]
+  tags: string[]
   targetDuration: number | null
   postEapi: (path: string, body: any) => Promise<any>
 }
 
 export async function searchSong(opts: SearchSongOptions) {
-  const splitSegments = (text: string) => Array.from(text.normalize('NFKC').toLowerCase().matchAll(/[\p{L}|\p{N}]+/gu)).map((g) => g[0])
+  const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b) / arr.length : 0.0
+
+  const segmentRegex =
+    /\p{N}+|[\p{sc=Hani}\p{sc=Hira}\p{sc=Kana}\p{sc=Hang}]+|\p{sc=Latn}+|(?<![\p{sc=Hani}\p{sc=Hira}\p{sc=Kana}\p{sc=Hang}\p{sc=Latn}])\p{L}+/gu
+  const splitSegments = (text: string) =>
+    Array.from(text.normalize('NFKC').toLowerCase().matchAll(segmentRegex)).map((g) => g[0])
 
   const similarityScore = (text: string, candidates: string[]) => {
     const segments = splitSegments(text)
     const candidateSegments = candidates.flatMap(splitSegments)
-    return segments.map((segment) => {
+    return avg(segments.map((segment) => {
       const maxDistance = Math.ceil(0.5 * segment.length)
       const closest = closestMatch(segment, candidateSegments, { maxDistance })
       if (!closest) {
@@ -124,37 +112,46 @@ export async function searchSong(opts: SearchSongOptions) {
       }
       const distance = leven(segment, closest, { maxDistance })
       return Math.max(1.0 - distance / maxDistance, 0.0)
-    }).reduce((a, b) => a + b, 0.0) / segments.length
+    }))
   }
 
-  const durationDiffScore = (duration: number, targetDuration: number) => {
-    if (duration < targetDuration) {
-      return Math.min(Math.pow(0.5, (targetDuration - duration) / 10.0 - 1.0), 1.0)
-    } else {
-      return Math.min(Math.pow(0.5, (duration - targetDuration) / 5.0 - 1.0), 1.0)
-    }
-  }
+  const durationDiffScore = (duration: number, targetDuration: number) =>
+    Math.min(Math.pow(0.5, Math.abs(targetDuration - duration) / 10.0 - 1.0), 1.0)
 
-  const extractTitle = (text: string) => text
-    .replaceAll(/\u3010.*?\u3011/g, '')
-    .replaceAll(/\uff08.*?\uff09/g, '')
-    .replaceAll(/\(.*?\)/g, '')
-    .replaceAll(/\bfeat\..+/g, '')
-    .replaceAll(/\bvo\..+/g, '')
-    .trim()
+  // const extractTitle = (text: string) => text
+  //   .replaceAll(/\u3010.*?\u3011/g, '\s+')
+  //   .replaceAll(/\uff08.*?\uff09/g, '')
+  //   .replaceAll(/\(.*?\)/g, '')
+  //   .replaceAll(/\[.*?\]/g, '')
+  //   .replaceAll(/\bfeat\..+/g, '')
+  //   .replaceAll(/\bvo\..+/g, '')
+  //   .trim()
 
-  const keywords = opts.texts.map(extractTitle).map((text) =>
-    /\u300a(.*?)\u300b/g.exec(text)?.[1].trim() ||
-    /\u300e(.*?)\u300f/g.exec(text)?.[1].trim() ||
-    /\u300c(.*?)\u300d/g.exec(text)?.[1].trim() ||
-    text
-  ).map((text) => splitSegments(text).join(' '))
+  const keywords = opts.titles
+    .flatMap((title) => [
+      title,
+      /\u300a(.*?)\u300b/g.exec(title)?.[1] ?? '',
+      /\u300e(.*?)\u300f/g.exec(title)?.[1] ?? '',
+      /\u300c(.*?)\u300d/g.exec(title)?.[1] ?? '',
+    ])
+    .filter((text) => !!text)
+    .map((text) => text
+      .replaceAll(/\u3010.*?\u3011/g, '')
+      .replaceAll(/\uff08.*?\uff09/g, '')
+      .replaceAll(/\(.*?\)/g, '')
+      .replaceAll(/\[.*?\]/g, '')
+      .replaceAll(/\bfeat\..+/g, '')
+      .replaceAll(/\bvo\..+/g, '')
+      .trim()
+    )
+    .filter((text) => !!text)
+    .map((text) => splitSegments(text).join(' '))
 
   const songs = (await Promise.all(
-    keywords.flatMap((keyword) => opts.postEapi('cloudsearch/pc', {
+    Array.from(new Set(keywords)).flatMap((keyword) => opts.postEapi('cloudsearch/pc', {
       s: keyword,
       type: 1,
-      limit: 20,
+      limit: 50,
     }))
   ))
     .map((searchResponse): any[] | undefined => searchResponse?.result?.songs)
@@ -164,10 +161,9 @@ export async function searchSong(opts: SearchSongOptions) {
       const name = song?.name as string | undefined
       const ar = song?.ar as any[] | undefined
       const dt = song?.dt as number | undefined
-      // const pop = song?.pop as number | undefined
+      const pop = song?.pop as number | undefined
       const alia = song?.alia as string[] | undefined
       const tns = song?.tns as string[] | undefined
-      // const originCoverType = song?.originCoverType as number | undefined
       if (!id || !name || !ar || !dt) {
         return undefined
       }
@@ -197,28 +193,39 @@ export async function searchSong(opts: SearchSongOptions) {
         ],
         artists,
         duration: dt / 1000.0,
+        pop: (pop ?? 0.0),
       }
     })
     .filter((song) => !!song)
     .map((song) => {
-      const nameOverCandidateScore = Math.max(
-        ...[song.name, extractTitle(song.name), ...song.alias]
-          .map((name) => similarityScore(name, opts.candidates)),
+      const nameScore = Math.max(
+        ...[song.name, /*extractTitle(song.name), */...song.alias]
+          .map((name) => similarityScore(name, [...opts.titles, ...opts.staffs, ...opts.tags])),
       )
-      const artistOverCandidateScore = song.artists.length ? song.artists.map((artist) => Math.max(
+      const artistScore = avg(song.artists.map((artist) => Math.max(
         ...[artist.name, ...artist.alias]
-          .map((name) => similarityScore(name, opts.candidates)),
-      )).reduce((a, b) => a + b, 0.0) / song.artists.length : 0.0
-      const titleOverSongScore = opts.title ? similarityScore(
-        opts.title,
+          .map((name) => similarityScore(name, [...opts.titles, ...opts.staffs, ...opts.tags])),
+      )))
+      const titleScore = Math.max(...opts.titles.map((title) => similarityScore(
+        title,
         [song.name, ...song.alias, ...song.artists.flatMap((artist) => [artist.name, ...artist.alias])],
-      ) : 1.0
+      )))
+      const staffScore = avg(opts.staffs.map((staff) => similarityScore(
+        staff,
+        [song.name, ...song.alias, ...song.artists.flatMap((artist) => [artist.name, ...artist.alias])],
+      )))
+      const tagScore = avg(opts.tags.map((tag) => similarityScore(
+        tag,
+        [song.name, ...song.alias, ...song.artists.flatMap((artist) => [artist.name, ...artist.alias])],
+      )))
       const durationScore = opts.targetDuration ? durationDiffScore(song.duration, opts.targetDuration) : 1.0
-      const finalScore = (
-        0.4 * nameOverCandidateScore +
-        0.4 * artistOverCandidateScore +
-        0.2 * titleOverSongScore
-      ) * durationScore
+      const percentage = Math.round((
+          30.0 * nameScore
+        + 20.0 * artistScore
+        + 20.0 * titleScore
+        + 20.0 * staffScore
+        + 10.0 * tagScore
+      ) * durationScore)
       return {
         song: {
           id: song.id,
@@ -227,11 +234,14 @@ export async function searchSong(opts: SearchSongOptions) {
           duration: song.duration,
         },
         scores: {
-          nameOverCandidateScore,
-          artistOverCandidateScore,
-          titleOverSongScore,
+          nameScore,
+          artistScore,
+          titleScore,
+          staffScore,
+          tagScore,
           durationScore,
-          finalScore,
+          percentage,
+          pop: song.pop,
         },
       }
     })
@@ -240,15 +250,25 @@ export async function searchSong(opts: SearchSongOptions) {
     return {
       song: song.song,
       name: song.song.name,
+      artists: song.song.artists.join(' | '),
       duration: song.song.duration,
-      nameOverCandidateScore: song.scores.nameOverCandidateScore,
-      artistOverCandidateScore: song.scores.artistOverCandidateScore,
-      titleOverSongScore: song.scores.titleOverSongScore,
+      nameScore: song.scores.nameScore,
+      artistScore: song.scores.artistScore,
+      titleScore: song.scores.titleScore,
+      staffScore: song.scores.staffScore,
+      tagScore: song.scores.tagScore,
       durationScore: song.scores.durationScore,
-      finalScore: song.scores.finalScore,
+      percentage: song.scores.percentage,
+      pop: song.scores.pop,
     }
   }))
-  const song = songs.reduce((previous, current) => current.scores.finalScore > previous.scores.finalScore ? current : previous).song
+  const song = songs
+    .filter((song) => song.scores.percentage >= 25)
+    .reduce((previous, current) =>
+      current.scores.percentage !== previous.scores.percentage ? (current.scores.percentage > previous.scores.percentage ? current : previous) :
+      current.scores.pop > previous.scores.pop ? current : previous
+    )
+    .song
 
   console.log("Selected:", song)
   if (!song) {
