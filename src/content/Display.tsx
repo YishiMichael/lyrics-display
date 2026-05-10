@@ -166,6 +166,7 @@ function* AudioSpectrumBars(props: {
     const value = props.values[index] / 255.0
     yield (
       <ReactKonva.Rect
+        key={index}
         width={props.width / props.values.length * props.proportion}
         height={value * props.height}
         x={(index + 0.5 * (1.0 - props.proportion)) * props.width / props.values.length}
@@ -197,22 +198,36 @@ export default function Display(props: Props) {
     props.setCanvas(layer.current?.getNativeCanvasElement() ?? null)
   }, [])
 
-  const url = useMonitoring(() => window.location.href)
+  const { bvid, page } = useMonitoring(() => {
+    const url = new URL(window.location.href)
+    return {
+      bvid: (
+        url.pathname.startsWith('/video/') ? url.pathname.split('/')[2] ?? null :
+        url.pathname.startsWith('/list/') ? url.searchParams.get('bvid') :
+        null
+      ),
+      page: (
+        url.pathname.startsWith('/video/') ? url.searchParams.get('p') :
+        url.pathname.startsWith('/list/') ? url.searchParams.get('p') :
+        null
+      ),
+    }
+  })
 
-  const [bvid, setBvid] = React.useState<string | null>(null)
-  React.useEffect(() => {
-    console.log("url updated", url)
-    const urlObject = new URL(url)
-    if (urlObject.pathname.startsWith('/video/')) {
-      setBvid(urlObject.pathname.split('/')[2] ?? null)
-      return
-    }
-    if (urlObject.pathname.startsWith('/list/')) {
-      setBvid(urlObject.searchParams.get('bvid'))
-      return
-    }
-    setBvid(null)
-  }, [url])
+  // const [bvid, setBvid] = React.useState<string | null>(null)
+  // React.useEffect(() => {
+  //   console.log("url updated", url)
+  //   const urlObject = new URL(url)
+  //   if (urlObject.pathname.startsWith('/video/')) {
+  //     setBvid(urlObject.pathname.split('/')[2] ?? null)
+  //     return
+  //   }
+  //   if (urlObject.pathname.startsWith('/list/')) {
+  //     setBvid(urlObject.searchParams.get('bvid'))
+  //     return
+  //   }
+  //   setBvid(null)
+  // }, [url])
 
   const getSwatches = (palette?: Palette) => {
     // const toLab = converter('lab')
@@ -264,13 +279,29 @@ export default function Display(props: Props) {
       })(),
       (async () => {
         const title = (json?.data?.View?.title ?? '') as string
-        const tag = (json?.data?.Tags?.find((tag: any) => tag.tag_type === 'bgm')?.tag_name ?? '') as string
+        const owner = (json?.data?.View?.owner?.name ?? '') as string
+        const tags = ((json?.data?.Tags as any[] | undefined)?.map((tag: any) => {
+          const type = tag?.tag_type as string | undefined
+          const name = tag?.tag_name as string | undefined
+          if (!type || !name) {
+            return undefined
+          }
+          return { type, name }
+        }).filter((tag) => !!tag) ?? [])
+        const bgmTags = tags.filter((tag) => tag.type === 'bgm').map((tag) => /\u300a(.*?)\u300b/g.exec(tag.name)?.[1].trim() ?? tag.name)
+        const channelTags = tags.filter((tag) => tag.type === 'old_channel').map((tag) => tag.name)
         // const text = tag ?? title
         // const text = json?.data?.View?.title ?? null
         // console.log(json?.data)
-        // const duration = json?.data?.View?.pages?.find((page) => page?.page === p)?.duration ?? null
+        const duration = json?.data?.View?.pages?.find((pageInfo: any) => pageInfo?.page === (page ?? 1))?.duration ?? null
         try {
-          setSong(await searchSong([title, tag], postEapi))
+          setSong(await searchSong({
+            texts: [title, ...bgmTags],
+            candidates: [title, owner, ...bgmTags, ...channelTags],
+            title: title,
+            targetDuration: duration,
+            postEapi,
+          }))
         } catch {
           setSong(null)
         }
@@ -376,6 +407,7 @@ export default function Display(props: Props) {
           align='left'
           verticalAlign='top'
           fontFamily={fontFamily}
+          wrap='none'
         />
         <ReactKonva.Text
           text={song?.artists?.join(' | ') ?? ''}
@@ -390,6 +422,7 @@ export default function Display(props: Props) {
           align='right'
           verticalAlign='top'
           fontFamily={fontFamily}
+          wrap='none'
         />
         <ReactKonva.Group
           x={50}

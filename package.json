@@ -16,6 +16,7 @@
     "@fortawesome/react-fontawesome": "^3.3.1",
     "crypto-ts": "^1.0.2",
     "konva": "^10.3.0",
+    "leven": "^4.1.0",
     "node-vibrant": "^4.0.4",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",

@@ -1,3 +1,5 @@
+import leven, { closestMatch } from 'leven'
+
 export class Lyrics {
   private meta: Map<string, string>
   private lines: {
@@ -83,51 +85,90 @@ export interface SongRecord {
   },
 }
 
-export async function searchSong(texts: string[], postEapi: (path: string, body: any) => Promise<any>) {
+// TODO: remove
+// function dedupBy<T, K>(input: T[], keyFn: (item: T) => K): T[] {
+//   const seen = new Set<K>()
+//   return input.filter((item) => {
+//     const key = keyFn(item)
+//     if (seen.has(key)) {
+//       return false
+//     }
+//     seen.add(key)
+//     return true
+//   })
+// }
+
+// function dedup<T>(input: T[]): T[] {
+//   return dedupBy(input, (data) => data)
+// }
+
+interface SearchSongOptions {
+  texts: string[]
+  candidates: string[]
+  title: string | null
+  targetDuration: number | null
+  postEapi: (path: string, body: any) => Promise<any>
+}
+
+export async function searchSong(opts: SearchSongOptions) {
   const splitSegments = (text: string) => Array.from(text.normalize('NFKC').toLowerCase().matchAll(/[\p{L}|\p{N}]+/gu)).map((g) => g[0])
 
-  const segments = new Set(texts.flatMap((text) => splitSegments(
+  const similarityScore = (text: string, candidates: string[]) => {
+    const segments = splitSegments(text)
+    const candidateSegments = candidates.flatMap(splitSegments)
+    return segments.map((segment) => {
+      const maxDistance = Math.ceil(0.5 * segment.length)
+      const closest = closestMatch(segment, candidateSegments, { maxDistance })
+      if (!closest) {
+        return 0.0
+      }
+      const distance = leven(segment, closest, { maxDistance })
+      return Math.max(1.0 - distance / maxDistance, 0.0)
+    }).reduce((a, b) => a + b, 0.0) / segments.length
+  }
+
+  const durationDiffScore = (duration: number, targetDuration: number) => {
+    if (duration < targetDuration) {
+      return Math.min(Math.pow(0.5, (targetDuration - duration) / 10.0 - 1.0), 1.0)
+    } else {
+      return Math.min(Math.pow(0.5, (duration - targetDuration) / 5.0 - 1.0), 1.0)
+    }
+  }
+
+  const extractTitle = (text: string) => text
+    .replaceAll(/\u3010.*?\u3011/g, '')
+    .replaceAll(/\uff08.*?\uff09/g, '')
+    .replaceAll(/\(.*?\)/g, '')
+    .replaceAll(/\bfeat\..+/g, '')
+    .replaceAll(/\bvo\..+/g, '')
+    .trim()
+
+  const keywords = opts.texts.map(extractTitle).map((text) =>
+    /\u300a(.*?)\u300b/g.exec(text)?.[1].trim() ||
+    /\u300e(.*?)\u300f/g.exec(text)?.[1].trim() ||
+    /\u300c(.*?)\u300d/g.exec(text)?.[1].trim() ||
     text
-      .replaceAll(/\bfeat\./g, '')
-      .replaceAll(/\bvo\./g, '')
-  )))
-  const song = (await Promise.all(
-    texts
-      .map((text) => splitSegments(
-        (
-          /\u300a(.*?)\u300b/g.exec(text)?.[1].trim() ||
-          /\u300e(.*?)\u300f/g.exec(text)?.[1].trim() ||
-          /\u300c(.*?)\u300d/g.exec(text)?.[1].trim() ||
-          text
-        )
-          .replaceAll(/\u3010.*?\u3011/g, '')
-          .replaceAll(/\uff08.*?\uff09/g, '')
-          .replaceAll(/\(.*?\)/g, '')
-          .replaceAll(/\bfeat\..+/g, '')
-          .replaceAll(/\bvo\..+/g, '')
-          .replaceAll(/\/.+/g, '')
-          .trim()
-      ).join(' '))
-      .filter((keyword) => keyword)
-      .flatMap((keyword) => postEapi('cloudsearch/pc', {
-        s: keyword,
-        type: 1,
-        limit: 10,
-      }))
+  ).map((text) => splitSegments(text).join(' '))
+
+  const songs = (await Promise.all(
+    keywords.flatMap((keyword) => opts.postEapi('cloudsearch/pc', {
+      s: keyword,
+      type: 1,
+      limit: 20,
+    }))
   ))
     .map((searchResponse): any[] | undefined => searchResponse?.result?.songs)
     .flatMap((songs) => songs ?? [])
     .map((song) => {
-      // console.log(song)
-      const id = song.id as number | undefined
-      const name = song.name as string | undefined
-      const ar = song.ar as any[] | undefined
-      const dt = song.dt as number | undefined
-      const pop = song.pop as number | undefined
-      const alia = song.alia as string[] | undefined
-      const tns = song.tns as string[] | undefined
-      const originCoverType = song.originCoverType as number | undefined
-      if (!id || !name || !ar || !dt || !pop) {
+      const id = song?.id as number | undefined
+      const name = song?.name as string | undefined
+      const ar = song?.ar as any[] | undefined
+      const dt = song?.dt as number | undefined
+      // const pop = song?.pop as number | undefined
+      const alia = song?.alia as string[] | undefined
+      const tns = song?.tns as string[] | undefined
+      // const originCoverType = song?.originCoverType as number | undefined
+      if (!id || !name || !ar || !dt) {
         return undefined
       }
       const artists = ar.map((artist) => {
@@ -135,92 +176,85 @@ export async function searchSong(texts: string[], postEapi: (path: string, body:
         const alia = artist?.alia as string[] | undefined
         const alias = artist?.alias as string[] | undefined
         const tns = artist?.tns as string[] | undefined
-        if (!name) {
+        if (!id || !name) {
           return undefined
         }
-        return { name, alia, alias, tns }
+        return {
+          name,
+          alias: [
+            ...alia ?? [],
+            ...alias ?? [],
+            ...tns ?? [],
+          ],
+        }
       }).filter((artist) => !!artist)
-      return { id, name, artists, dt, pop, alia, tns, originCoverType }
-    })
-    .map((song) => {
-      if (!song) {
-        return
-      }
-      const remainingSegments = new Set(segments)
-      const artistsMatches = song.artists.filter((artist) => [
-          artist.name,
-          ...artist.alia ?? [],
-          ...artist.alias ?? [],
-          ...artist.tns ?? []
-        ]
-          .map((artist) => splitSegments(artist).filter((segment) => remainingSegments.has(segment)))
-          .reduce((previous, current) => current.length > previous.length ? current : previous)
-          .map((segment) => remainingSegments.delete(segment))
-          .length
-      ).length
-      const nameMatches = [
-        song.name,
-        ...song.alia ?? [],
-        ...song.tns ?? [],
-      ]
-        .map((name) => splitSegments(name).filter((segment) => remainingSegments.has(segment)))
-        .reduce((previous, current) => current.length > previous.length ? current : previous)
-        .map((segment) => remainingSegments.delete(segment))
-        .length
-      // console.log({
-      //   id: song.id,
-      //   name: [
-      //     song.name,
-      //     ...song.alia ?? [],
-      //     ...song.tns ?? [],
-      //   ],
-      //   artists: song.artists.map((artist) => [
-      //     artist.name,
-      //     ...artist.alia ?? [],
-      //     ...artist.alias ?? [],
-      //     ...artist.tns ?? []
-      //   ]),
-      //   duration: song.dt / 1000,
-      //   score: {
-      //     matches: nameMatches + artistsMatches,
-      //     artistsMatches,
-      //     mismatches: remainingSegments.size,
-      //     pop: song.pop,
-      //   },
-      //   originCoverType: song.originCoverType,
-      // })
-      if (!(nameMatches + artistsMatches)) {
-        return undefined
-      }
-      if (song.originCoverType !== 1 && !artistsMatches) {
-        return undefined
-      }
       return {
-        id: song.id,
-        name: song.name,
-        artists: song.artists.map((artist) => artist.name),
-        duration: song.dt / 1000,
-        score: {
-          matches: nameMatches + artistsMatches,
-          artistsMatches,
-          mismatches: remainingSegments.size,
-          pop: song.pop,
-        },
+        id,
+        name,
+        alias: [
+          ...alia ?? [],
+          ...tns ?? [],
+        ],
+        artists,
+        duration: dt / 1000.0,
       }
     })
     .filter((song) => !!song)
-    .reduce((previous, current) => (
-      current.score.matches !== previous.score.matches ? current.score.matches > previous.score.matches :
-      current.score.artistsMatches !== previous.score.artistsMatches ? current.score.artistsMatches > previous.score.artistsMatches :
-      current.score.mismatches !== previous.score.mismatches ? current.score.mismatches < previous.score.mismatches :
-      current.score.pop > previous.score.pop
-    ) ? current : previous)
+    .map((song) => {
+      const nameOverCandidateScore = Math.max(
+        ...[song.name, extractTitle(song.name), ...song.alias]
+          .map((name) => similarityScore(name, opts.candidates)),
+      )
+      const artistOverCandidateScore = song.artists.length ? song.artists.map((artist) => Math.max(
+        ...[artist.name, ...artist.alias]
+          .map((name) => similarityScore(name, opts.candidates)),
+      )).reduce((a, b) => a + b, 0.0) / song.artists.length : 0.0
+      const titleOverSongScore = opts.title ? similarityScore(
+        opts.title,
+        [song.name, ...song.alias, ...song.artists.flatMap((artist) => [artist.name, ...artist.alias])],
+      ) : 1.0
+      const durationScore = opts.targetDuration ? durationDiffScore(song.duration, opts.targetDuration) : 1.0
+      const finalScore = (
+        0.4 * nameOverCandidateScore +
+        0.4 * artistOverCandidateScore +
+        0.2 * titleOverSongScore
+      ) * durationScore
+      return {
+        song: {
+          id: song.id,
+          name: song.name,
+          artists: song.artists.map((artist) => artist.name),
+          duration: song.duration,
+        },
+        scores: {
+          nameOverCandidateScore,
+          artistOverCandidateScore,
+          titleOverSongScore,
+          durationScore,
+          finalScore,
+        },
+      }
+    })
 
-  // console.log("Selected:", song)
+  console.table(songs.map((song) => {
+    return {
+      song: song.song,
+      name: song.song.name,
+      duration: song.song.duration,
+      nameOverCandidateScore: song.scores.nameOverCandidateScore,
+      artistOverCandidateScore: song.scores.artistOverCandidateScore,
+      titleOverSongScore: song.scores.titleOverSongScore,
+      durationScore: song.scores.durationScore,
+      finalScore: song.scores.finalScore,
+    }
+  }))
+  const song = songs.reduce((previous, current) => current.scores.finalScore > previous.scores.finalScore ? current : previous).song
+
+  console.log("Selected:", song)
   if (!song) {
     return null
   }
-  const lyricsResponse = await postEapi('song/lyric', {
+  const lyricsResponse = await opts.postEapi('song/lyric', {
     id: song.id,
     lv: -1,
     kv: -1,
