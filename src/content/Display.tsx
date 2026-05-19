@@ -1,9 +1,10 @@
 import React from 'react'
 import Konva from 'konva'
 import * as ReactKonva from 'react-konva'
+import { QueryClient } from '@tanstack/react-query'
 import { Palette, Swatch, rgbDiff } from '@vibrant/color'
 import { Vibrant } from 'node-vibrant/browser'
-import { Lyrics, SongRecord, searchSong } from './song.ts'
+import { Lyrics, searchSong, SongRecord } from './song.ts'
 
 function useMonitoring<T>(callback: () => T) {
   const data = React.useRef(callback())
@@ -191,6 +192,21 @@ analyser.fftSize = 1 << 6
 analyser.connect(audioCtx.destination)
 const sourceMap: WeakMap<HTMLMediaElement, MediaElementAudioSourceNode> = new WeakMap()
 
+const videoQueryClient = new QueryClient()
+async function fetchVideoData(bvid: string | null) {
+  if (!bvid) {
+    return null
+  }
+  const { data } = await videoQueryClient.fetchQuery({
+    queryKey: [bvid],
+    queryFn: async () => await fetch(`https://api.bilibili.com/x/web-interface/view/detail?bvid=${bvid}`, {
+      method: 'GET',
+      credentials: 'include',
+    }).then((response) => response.json()),
+  })
+  return data ?? null
+}
+
 export default function Display(props: Props) {
   const layer = React.useRef<Konva.Layer | null>(null)
 
@@ -207,33 +223,14 @@ export default function Display(props: Props) {
         null
       ),
       page: (
-        url.pathname.startsWith('/video/') ? url.searchParams.get('p') :
-        url.pathname.startsWith('/list/') ? url.searchParams.get('p') :
+        url.pathname.startsWith('/video/') ? parseInt(url.searchParams.get('p') ?? '1') :
+        url.pathname.startsWith('/list/') ? parseInt(url.searchParams.get('p') ?? '1') :
         null
       ),
     }
   })
 
-  // const [bvid, setBvid] = React.useState<string | null>(null)
-  // React.useEffect(() => {
-  //   console.log("url updated", url)
-  //   const urlObject = new URL(url)
-  //   if (urlObject.pathname.startsWith('/video/')) {
-  //     setBvid(urlObject.pathname.split('/')[2] ?? null)
-  //     return
-  //   }
-  //   if (urlObject.pathname.startsWith('/list/')) {
-  //     setBvid(urlObject.searchParams.get('bvid'))
-  //     return
-  //   }
-  //   setBvid(null)
-  // }, [url])
-
   const getSwatches = (palette?: Palette) => {
-    // const toLab = converter('lab')
-    // const diff = differenceCiede2000()
-    // const areClose = (c1: Swatch, c2: Swatch) => rgbDiff(c1.rgb, c2.rgb) < 10
-
     const colors = [
       palette?.Vibrant,
       palette?.Muted,
@@ -253,61 +250,61 @@ export default function Display(props: Props) {
     }
   }
 
-  const postEapi = (path: string, body: any) => chrome.runtime.sendMessage({ path, body })
   const [swatches, setSwatches] = React.useState(getSwatches)
+  React.useEffect(() => {
+    fetchVideoData(bvid)
+      .then(async (videoData) => {
+        if (!videoData) {
+          return undefined
+        }
+        const pic = videoData.View?.pic as string | undefined ?? null
+        if (!pic) {
+          return undefined
+        }
+        return await Vibrant.from(pic).getPalette()
+      })
+      .then(getSwatches)
+      .then(setSwatches)
+  }, [bvid])
+
   const [song, setSong] = React.useState<SongRecord | null>(null)
   React.useEffect(() => {
-    // const urlObject = new URL(url)
-    // const bvid = urlObject.pathname.startsWith('/video/') ? urlObject.pathname.split('/')[2]
-    //   : urlObject.pathname.startsWith('/list/') ? urlObject.searchParams.get('bvid') : null
-    // const p = parseInt(urlObject.searchParams.get('p') ?? '1')
-
-    if (!bvid) {
-      return
-    }
-    fetch(`https://api.bilibili.com/x/web-interface/view/detail?bvid=${bvid}`, {
-      method: 'GET',
-      credentials: 'include',
-    }).then((response) => response.json()).then((json) => Promise.all([
-      (async () => {
-        const pic = (json?.data?.View?.pic ?? '') as string
-        try {
-          setSwatches(getSwatches(pic ? await Vibrant.from(pic).getPalette() : undefined))
-        } catch {
-          setSwatches(getSwatches())
+    fetchVideoData(bvid)
+      .then(async (videoData) => {
+        if (!videoData) {
+          return null
         }
-      })(),
-      (async () => {
-        const title = (json?.data?.View?.title ?? '') as string
-        const staffs = (json?.data?.View?.staff?.map((staff: any) => staff?.name ?? '') ?? [json?.data?.View?.owner?.name ?? '']) as string[]
-        const tags = ((json?.data?.Tags as any[] | undefined)?.map((tag: any) => {
-          const type = tag?.tag_type as string | undefined
-          const name = tag?.tag_name as string | undefined
-          if (!type || !name) {
-            return undefined
-          }
-          return { type, name }
-        }).filter((tag) => !!tag) ?? [])
+        const title = videoData.View?.title as string | undefined ?? ''
+        const staffs = (videoData.View?.staff as any[] | undefined)
+          ?.map((staff) => staff?.name as string | undefined ?? '')
+          ?? [videoData.View?.owner?.name as string | undefined ?? '']
+        const tags = (videoData.Tags as any[] | undefined)
+          ?.map((tag) => {
+            const type = tag?.tag_type as string | undefined
+            const name = tag?.tag_name as string | undefined
+            if (!type || !name) {
+              return undefined
+            }
+            return { type, name }
+          })
+          ?.filter((tag) => !!tag)
+          ?? []
         const bgmTags = tags.filter((tag) => tag.type === 'bgm').map((tag) => /\u300a(.*?)\u300b/g.exec(tag.name)?.[1].trim() ?? tag.name)
         const channelTags = tags.filter((tag) => tag.type === 'old_channel').map((tag) => tag.name)
-        // const text = tag ?? title
-        // const text = json?.data?.View?.title ?? null
-        // console.log(json?.data)
-        const duration = json?.data?.View?.pages?.find((pageInfo: any) => pageInfo?.page === (page ?? 1))?.duration ?? null
-        try {
-          setSong(await searchSong({
-            titles: [title, ...bgmTags],
-            staffs,
-            tags: channelTags,
-            targetDuration: duration,
-            postEapi,
-          }))
-        } catch {
-          setSong(null)
+        const duration = (videoData.View?.pages as any[] | undefined)
+          ?.find((pageInfo) => pageInfo?.page as number | undefined === page)
+          ?.duration as number | undefined
+          ?? null
+        const searchSongOptions = {
+          titles: [title, ...bgmTags],
+          staffs,
+          tags: channelTags,
+          targetDuration: duration,
         }
-      })()
-    ]))
-  }, [bvid])
+        return await searchSong(searchSongOptions)
+      })
+      .then(setSong)
+  }, [bvid, page])
 
   const media = useMonitoring(() => document.getElementById('bilibili-player')?.getElementsByTagName('video').item(0) ?? null)
 
@@ -349,7 +346,7 @@ export default function Display(props: Props) {
     // }
     source.current.connect(analyser)
     // byteFrequencyData.current = dataArray
-    
+
     const interval = setInterval(() => {
       analyser.getByteFrequencyData(byteFrequencyData.current)
     }, 10)

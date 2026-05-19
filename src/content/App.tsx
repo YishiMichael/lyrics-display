@@ -129,7 +129,7 @@ export default function App() {
   const [canvas, setCanvas] = React.useState<HTMLCanvasElement | null>(null)
 
   const draggablePanel = useDraggableElement<HTMLDivElement>({
-    xBuff: 100,
+    xBuff: 50,
     yBuff: 100,
     xReverse: false,
     yReverse: false,
