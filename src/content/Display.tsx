@@ -1,10 +1,9 @@
 import React from 'react'
 import Konva from 'konva'
 import * as ReactKonva from 'react-konva'
-import { QueryClient } from '@tanstack/react-query'
-import { Palette, Swatch, rgbDiff } from '@vibrant/color'
-import { Vibrant } from 'node-vibrant/browser'
-import { Lyrics, searchSong, SongRecord } from './song.ts'
+import { TinyColor } from '@ctrl/tinycolor'
+import Lyrics from './lyrics.ts'
+import { SongRecord, SwatchesRecord, tryInstantiatePlatform } from './platform.ts'
 
 function useMonitoring<T>(callback: () => T) {
   const data = React.useRef(callback())
@@ -32,7 +31,7 @@ function* LyricsLines(props: {
 
   fontSize: number
   fontFamily: string
-  foreground: string
+  foreground: TinyColor
 }) {
   if (!props.lyrics) {
     return
@@ -65,10 +64,10 @@ function* LyricsLines(props: {
       fillLinearGradientStartPoint={{ x: 0, y: 0 }}
       fillLinearGradientEndPoint={{ x: 0, y: size.height }}
       fillLinearGradientColorStops={[
-        0.0, `color-mix(${props.foreground} 25%, white)`,
-        1.0, props.foreground,
+        0.0, props.foreground.lighten(75).toHex8String(),
+        1.0, props.foreground.toHex8String(),
       ]}
-      stroke={`color-mix(${props.foreground} 50%, black)`}
+      stroke={props.foreground.darken(50).toHex8String()}
       strokeWidth={2}
       fillAfterStrokeEnabled
       fontFamily={konvaTemplate.fontFamily()}
@@ -93,10 +92,10 @@ function* LyricsLines(props: {
         fillLinearGradientStartPoint={{ x: 0, y: -cursorTop }}
         fillLinearGradientEndPoint={{ x: 0, y: -cursorTop + props.height }}
         fillLinearGradientColorStops={[
-          0.0, `${props.foreground}00`,
-          0.2, `${props.foreground}AA`,
-          0.8, `${props.foreground}AA`,
-          1.0, `${props.foreground}00`,
+          0.0, props.foreground.clone().setAlpha(0.0).toHex8String(),
+          0.2, props.foreground.clone().setAlpha(0.75).toHex8String(),
+          0.8, props.foreground.clone().setAlpha(0.75).toHex8String(),
+          1.0, props.foreground.clone().setAlpha(0.0).toHex8String(),
         ]}
         // strokeLinearGradientStartPoint={{ x: 0, y: -cursorTop }}
         // strokeLinearGradientEndPoint={{ x: 0, y: -cursorTop + props.height }}
@@ -132,10 +131,10 @@ function* LyricsLines(props: {
         fillLinearGradientStartPoint={{ x: 0, y: -cursorBottom + size.height }}
         fillLinearGradientEndPoint={{ x: 0, y: -cursorBottom + size.height + props.height }}
         fillLinearGradientColorStops={[
-          0.0, `${props.foreground}00`,
-          0.2, `${props.foreground}AA`,
-          0.8, `${props.foreground}AA`,
-          1.0, `${props.foreground}00`,
+          0.0, props.foreground.clone().setAlpha(0.0).toHex8String(),
+          0.2, props.foreground.clone().setAlpha(0.75).toHex8String(),
+          0.8, props.foreground.clone().setAlpha(0.75).toHex8String(),
+          1.0, props.foreground.clone().setAlpha(0.0).toHex8String(),
         ]}
         // strokeLinearGradientStartPoint={{ x: 0, y: -cursorBottom + size.height }}
         // strokeLinearGradientEndPoint={{ x: 0, y: -cursorBottom + size.height + props.height }}
@@ -157,12 +156,15 @@ function* LyricsLines(props: {
 }
 
 function* AudioSpectrumBars(props: {
-  values: Uint8Array
+  values: Uint8Array<ArrayBuffer> | null
   width: number
   height: number
   proportion: number
-  foreground: string
+  foreground: TinyColor
 }) {
+  if (!props.values) {
+    return
+  }
   for (let index = 0; index < props.values.length; ++index) {
     const value = props.values[index] / 255.0
     yield (
@@ -172,13 +174,61 @@ function* AudioSpectrumBars(props: {
         height={value * props.height}
         x={(index + 0.5 * (1.0 - props.proportion)) * props.width / props.values.length}
         y={(1.0 - value) * props.height}
-        fill={`${props.foreground}33`}
+        fill={props.foreground.clone().setAlpha(0.2).toHex8String()}
       />
     )
   }
-  // return props.values.map((value, index, array) => {
-  //   return 
-  // })
+}
+
+class FrequencyWave {
+  static audioCtx = new AudioContext()
+  static analyser = ((audioCtx: AudioContext) => {
+    const analyser = audioCtx.createAnalyser()
+    analyser.fftSize = 1 << 6
+    analyser.connect(audioCtx.destination)
+    return analyser
+  })(FrequencyWave.audioCtx)
+  static sourceMap: WeakMap<HTMLMediaElement, MediaElementAudioSourceNode> = new WeakMap()
+
+  private analyser: AnalyserNode
+  private source: MediaElementAudioSourceNode
+  private byteFrequencyDataPingpong: [Uint8Array<ArrayBuffer>, Uint8Array<ArrayBuffer>]
+  private pingpongFlag: boolean
+
+  constructor(analyser: AnalyserNode, source: MediaElementAudioSourceNode) {
+    source.connect(analyser)
+    this.analyser = analyser
+    this.source = source
+    this.byteFrequencyDataPingpong = [
+      new Uint8Array(analyser.frequencyBinCount),
+      new Uint8Array(analyser.frequencyBinCount),
+    ]
+    this.pingpongFlag = false
+  }
+
+  static attach(media: HTMLMediaElement) {
+    return new FrequencyWave(
+      FrequencyWave.analyser,
+      FrequencyWave.sourceMap.get(media) ?? (
+        (media) => {
+          const source = FrequencyWave.audioCtx.createMediaElementSource(media)
+          FrequencyWave.sourceMap.set(media, source)
+          return source
+        }
+      )(media),
+    )
+  }
+
+  getByteFrequencyData() {
+    const byteFrequencyData = this.byteFrequencyDataPingpong[this.pingpongFlag ? 1 : 0]
+    this.pingpongFlag = !this.pingpongFlag
+    this.analyser.getByteFrequencyData(byteFrequencyData)
+    return byteFrequencyData
+  }
+
+  destructor() {
+    this.source.disconnect()
+  }
 }
 
 interface Props {
@@ -186,128 +236,40 @@ interface Props {
   setCanvas: React.Dispatch<React.SetStateAction<HTMLCanvasElement | null>>
 }
 
-const audioCtx = new AudioContext()
-const analyser = audioCtx.createAnalyser()
-analyser.fftSize = 1 << 6
-analyser.connect(audioCtx.destination)
-const sourceMap: WeakMap<HTMLMediaElement, MediaElementAudioSourceNode> = new WeakMap()
-
-const videoQueryClient = new QueryClient()
-async function fetchVideoData(bvid: string | null) {
-  if (!bvid) {
-    return null
-  }
-  const { data } = await videoQueryClient.fetchQuery({
-    queryKey: [bvid],
-    queryFn: async () => await fetch(`https://api.bilibili.com/x/web-interface/view/detail?bvid=${bvid}`, {
-      method: 'GET',
-      credentials: 'include',
-    }).then((response) => response.json()),
-  })
-  return data ?? null
-}
-
 export default function Display(props: Props) {
   const layer = React.useRef<Konva.Layer | null>(null)
-
   React.useEffect(() => {
     props.setCanvas(layer.current?.getNativeCanvasElement() ?? null)
   }, [])
 
-  const { bvid, page } = useMonitoring(() => {
-    const url = new URL(window.location.href)
-    return {
-      bvid: (
-        url.pathname.startsWith('/video/') ? url.pathname.split('/')[2] ?? null :
-        url.pathname.startsWith('/list/') ? url.searchParams.get('bvid') :
-        null
-      ),
-      page: (
-        url.pathname.startsWith('/video/') ? parseInt(url.searchParams.get('p') ?? '1') :
-        url.pathname.startsWith('/list/') ? parseInt(url.searchParams.get('p') ?? '1') :
-        null
-      ),
-    }
-  })
+  const url = useMonitoring(() => window.location.href)
+  const platform = React.useMemo(() => tryInstantiatePlatform(new URL(url)), [url])
 
-  const getSwatches = (palette?: Palette) => {
-    const colors = [
-      palette?.Vibrant,
-      palette?.Muted,
-      palette?.DarkVibrant,
-      palette?.DarkMuted,
-      palette?.LightVibrant,
-      palette?.LightMuted,
-    ]
-      .filter((color) => !!color)
-      .toSorted((prev, next) => prev.population - next.population)
-    const background = colors.at(-1) ?? new Swatch([51, 51, 51], 0)
-    const foreground = colors.findLast((foreground) => rgbDiff(background.rgb, foreground.rgb) >= 25.0)
-      ?? new Swatch(background.hsl[2] > 0.5 ? [51, 51, 51] : [255, 255, 255], 0)
+  const defaultSwatches = () => {
     return {
-      background: background.hex,
-      foreground: foreground.hex,
+      background: new TinyColor('#333333'),
+      foreground: new TinyColor('#ffffff'),
     }
   }
-
-  const [swatches, setSwatches] = React.useState(getSwatches)
+  const [swatches, setSwatches] = React.useState<SwatchesRecord>(defaultSwatches)
   React.useEffect(() => {
-    fetchVideoData(bvid)
-      .then(async (videoData) => {
-        if (!videoData) {
-          return undefined
-        }
-        const pic = videoData.View?.pic as string | undefined ?? null
-        if (!pic) {
-          return undefined
-        }
-        return await Vibrant.from(pic).getPalette()
-      })
-      .then(getSwatches)
-      .then(setSwatches)
-  }, [bvid])
+    if (!platform) {
+      setSwatches(swatches)
+      return
+    }
+    platform.swatches().then((swatches) => setSwatches(swatches ?? defaultSwatches()))
+  }, [platform])
 
   const [song, setSong] = React.useState<SongRecord | null>(null)
   React.useEffect(() => {
-    fetchVideoData(bvid)
-      .then(async (videoData) => {
-        if (!videoData) {
-          return null
-        }
-        const title = videoData.View?.title as string | undefined ?? ''
-        const staffs = (videoData.View?.staff as any[] | undefined)
-          ?.map((staff) => staff?.name as string | undefined ?? '')
-          ?? [videoData.View?.owner?.name as string | undefined ?? '']
-        const tags = (videoData.Tags as any[] | undefined)
-          ?.map((tag) => {
-            const type = tag?.tag_type as string | undefined
-            const name = tag?.tag_name as string | undefined
-            if (!type || !name) {
-              return undefined
-            }
-            return { type, name }
-          })
-          ?.filter((tag) => !!tag)
-          ?? []
-        const bgmTags = tags.filter((tag) => tag.type === 'bgm').map((tag) => /\u300a(.*?)\u300b/g.exec(tag.name)?.[1].trim() ?? tag.name)
-        const channelTags = tags.filter((tag) => tag.type === 'old_channel').map((tag) => tag.name)
-        const duration = (videoData.View?.pages as any[] | undefined)
-          ?.find((pageInfo) => pageInfo?.page as number | undefined === page)
-          ?.duration as number | undefined
-          ?? null
-        const searchSongOptions = {
-          titles: [title, ...bgmTags],
-          staffs,
-          tags: channelTags,
-          targetDuration: duration,
-        }
-        return await searchSong(searchSongOptions)
-      })
-      .then(setSong)
-  }, [bvid, page])
+    if (!platform) {
+      setSong(null)
+      return
+    }
+    platform.song().then(setSong)
+  }, [platform])
 
-  const media = useMonitoring(() => document.getElementById('bilibili-player')?.getElementsByTagName('video').item(0) ?? null)
-
+  const media = useMonitoring(() => platform?.getMedia(document) ?? null)
   React.useEffect(() => {
     props.setAppVisible(!!media)
     return () => {
@@ -327,41 +289,17 @@ export default function Display(props: Props) {
     }
   }, [])
 
-  const source = React.useRef<MediaElementAudioSourceNode | null>(null)
-  const byteFrequencyData = React.useRef(new Uint8Array(analyser.frequencyBinCount))
-  // const arr = React.useRef([])
+  const frequencyWave = React.useRef<FrequencyWave | null>(null)
   React.useEffect(() => {
     if (!media) {
       return
     }
-    source.current = sourceMap.get(media) ?? null
-    if (!source.current) {
-      source.current = audioCtx.createMediaElementSource(media)
-      sourceMap.set(media, source.current)
-    }
-    // const source = sourceMap.get(media)!
-    // console.log("includes?:", arr.current.includes(media))
-    // if (!arr.current.includes(media)) {
-    //   arr.current.push(media)
-    // }
-    source.current.connect(analyser)
-    // byteFrequencyData.current = dataArray
-
-    const interval = setInterval(() => {
-      analyser.getByteFrequencyData(byteFrequencyData.current)
-    }, 10)
-    // props.setAppVisible(true)
+    frequencyWave.current = FrequencyWave.attach(media)
     return () => {
-      // setCurrentTime(0.0)
-      // byteFrequencyData.current = null
-      if (source.current) {
-        source.current.disconnect()
-        source.current = null
+      if (frequencyWave.current) {
+        frequencyWave.current.destructor()
+        frequencyWave.current = null
       }
-      // analyser.disconnect()
-      // audioCtx.close()
-      clearInterval(interval)
-      // props.setAppVisible(false)
     }
   }, [media])
 
@@ -389,7 +327,7 @@ export default function Display(props: Props) {
         <ReactKonva.Rect
           width={600}
           height={150}
-          fill={swatches.background}
+          fill={swatches.background.toHex8String()}
         />
         <ReactKonva.Text
           text={song?.name ?? ''}
@@ -397,8 +335,8 @@ export default function Display(props: Props) {
           x={20}
           y={20}
           fontSize={20}
-          fill={swatches.foreground}
-          stroke={`color-mix(${swatches.foreground} 50%, black)`}
+          fill={swatches.foreground.toHex8String()}
+          stroke={swatches.foreground.darken(50).toHex8String()}
           strokeWidth={0}
           fillAfterStrokeEnabled
           align='left'
@@ -412,8 +350,8 @@ export default function Display(props: Props) {
           x={20}
           y={20}
           fontSize={15}
-          fill={swatches.foreground}
-          stroke={`color-mix(${swatches.foreground} 50%, black)`}
+          fill={swatches.foreground.toHex8String()}
+          stroke={swatches.foreground.darken(50).toHex8String()}
           strokeWidth={0}
           fillAfterStrokeEnabled
           align='right'
@@ -443,7 +381,7 @@ export default function Display(props: Props) {
           y={50}
         >
           <AudioSpectrumBars
-            values={byteFrequencyData.current}
+            values={frequencyWave.current?.getByteFrequencyData() ?? null}
             width={600}
             height={100}
             proportion={0.4}

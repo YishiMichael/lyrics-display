@@ -1,3 +1,0 @@
-interface API<T> {
-
-}
