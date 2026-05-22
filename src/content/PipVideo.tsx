@@ -1,12 +1,10 @@
 import React from 'react'
 
-interface Props {
+export default function PipVideo(props: {
   canvas: HTMLCanvasElement | null
   pipVisible: boolean
   setPipVisible: React.Dispatch<React.SetStateAction<boolean>>
-}
-
-export default function PipVideo(props: Props) {
+}) {
   const ref = React.useRef<HTMLVideoElement | null>(null)
 
   const open = async () => {

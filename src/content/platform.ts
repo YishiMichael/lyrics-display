@@ -2,30 +2,30 @@ import { TinyColor } from '@ctrl/tinycolor'
 import Lyrics from './lyrics.ts'
 import BilibiliPlatform from './platforms/bilibili.ts'
 
-export interface SongRecord {
+interface SongRecord {
   name: string,
   artists: string[],
   lyrics: {
-    original: Lyrics | null,
-    translated: Lyrics | null,
-    karaoke: Lyrics | null,
+    original?: Lyrics,
+    translated?: Lyrics,
+    karaoke?: Lyrics,
   },
 }
 
-export interface SwatchesRecord {
+interface SwatchesRecord {
   background: TinyColor,
   foreground: TinyColor,
 }
 
 export interface Platform {
-  song(): Promise<SongRecord | null>
-  swatches(): Promise<SwatchesRecord | null>
-  getMedia(document: Document): HTMLMediaElement | null
+  song(): Promise<SongRecord | undefined>
+  swatches(): Promise<SwatchesRecord | undefined>
+  getMedia(document: Document): HTMLMediaElement | undefined
 }
 
 export function tryInstantiatePlatform(url: URL) {
   return (
     BilibiliPlatform.tryInstantiate(url) ??
-    null
+    undefined
   )
 }

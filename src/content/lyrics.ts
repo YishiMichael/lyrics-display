@@ -18,24 +18,24 @@ export default class Lyrics {
   }
 
   getTextByIndex(index: number) {
-    return this.lines[index]?.text ?? null
+    return this.lines.at(index)?.text
   }
 
   getSpan(time: number) {
     const getTimeByIndex = (index: number) => (
-      index < 0 ? null :
+      index < 0 ? undefined :
       index < this.lines.length ? this.lines[index].time :
       index === this.lines.length ? this.duration :
-      null
+      undefined
     )
     const validateIndex = (index: number) => {
       const startTime = getTimeByIndex(index)
       const stopTime = getTimeByIndex(index + 1)
-      return (startTime === null || startTime <= time) && (stopTime === null || time < stopTime) ? {
+      return (startTime === undefined || startTime <= time) && (stopTime === undefined || time < stopTime) ? {
         index,
-        startTime: startTime === null ? (this.lines[0]?.time ?? this.duration) : startTime,
-        stopTime: stopTime === null ? this.duration : stopTime,
-      } : null
+        startTime: startTime === undefined ? (this.lines.at(0)?.time ?? this.duration) : startTime,
+        stopTime: stopTime === undefined ? this.duration : stopTime,
+      } : undefined
     }
 
     for (const _ of Array.from({ length: this.indicesRotator.length })) {
@@ -49,7 +49,7 @@ export default class Lyrics {
     }
     return {
       index: 0,
-      startTime: this.lines[0]?.time ?? this.duration,
+      startTime: this.lines.at(0)?.time ?? this.duration,
       stopTime: this.duration,
     }
   }
@@ -59,6 +59,6 @@ export default class Lyrics {
   }
 
   async detectLanguage() {
-    return (await chrome.i18n.detectLanguage(this.lines.map((line) => line.text).join('\n'))).languages[0]?.language ?? null
+    return (await chrome.i18n.detectLanguage(this.lines.map((line) => line.text).join('\n'))).languages.at(0)?.language
   }
 }

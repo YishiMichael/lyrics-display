@@ -2,15 +2,13 @@ import React from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import styles from './Panel.module.css'
 
-interface Props {
+export default function Panel(props: {
   ref: React.RefObject<HTMLDivElement | null>
   pipVisible: boolean
   onMouseDownDrag: (event: React.MouseEvent) => void
   onClickPipButton: () => void
   onClickSettingsButton: () => void
-}
-
-export default function Panel(props: Props) {
+}) {
   return (
     <div
       ref={props.ref}

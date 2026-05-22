@@ -3,19 +3,17 @@ import leven, { closestMatch } from 'leven'
 import { Md5 } from 'ts-md5'
 import * as CryptoTS from 'crypto-ts'
 import { Vibrant } from 'node-vibrant/browser'
-import { TinyColor } from '@ctrl/tinycolor'
+import { TinyColor, isReadable, mostReadable, readability } from '@ctrl/tinycolor'
 import { Platform } from '../platform.ts'
 import Lyrics from '../lyrics.ts'
 
-// const colorDiff = differenceCiede2000()
-
 export default class BilibiliPlatform implements Platform {
-  private bvid: string | null
-  private page: number | null
+  private bvid?: string
+  private page?: number
 
   constructor(params: {
-    bvid: string | null
-    page: number | null
+    bvid?: string
+    page?: number
   }) {
     this.bvid = params.bvid
     this.page = params.page
@@ -23,9 +21,9 @@ export default class BilibiliPlatform implements Platform {
 
   static videoQueryClient = new QueryClient()
 
-  static async fetchVideoData(bvid: string | null) {
+  static async fetchVideoData(bvid: string) {
     if (!bvid) {
-      return null
+      return
     }
     const { data } = await BilibiliPlatform.videoQueryClient.fetchQuery({
       queryKey: [bvid],
@@ -34,7 +32,7 @@ export default class BilibiliPlatform implements Platform {
         credentials: 'include',
       }).then((response) => response.json()),
     })
-    return data ?? null
+    return data
   }
 
   static eapiQueryClient = new QueryClient()
@@ -77,7 +75,7 @@ export default class BilibiliPlatform implements Platform {
     titles: string[]
     staffs: string[]
     tags: string[]
-    targetDuration: number | null
+    targetDuration?: number
   }) {
     const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b) / arr.length : 0.0
 
@@ -142,7 +140,7 @@ export default class BilibiliPlatform implements Platform {
         const alia = song?.alia as string[] | undefined
         const tns = song?.tns as string[] | undefined
         if (!id || !name || !ar || !dt) {
-          return undefined
+          return
         }
         const artists = ar.map((artist) => {
           const name = artist?.name as string | undefined
@@ -150,7 +148,7 @@ export default class BilibiliPlatform implements Platform {
           const alias = artist?.alias as string[] | undefined
           const tns = artist?.tns as string[] | undefined
           if (!id || !name) {
-            return undefined
+            return
           }
           return {
             name,
@@ -236,17 +234,17 @@ export default class BilibiliPlatform implements Platform {
       }
     }))
 
-    const song = songs[0]
-    return song && song.percentage >= 25 ? song : null
+    const song = songs.at(0)
+    return song && song.percentage >= 25 ? song : undefined
   }
 
   static async fetchLyrics(song: {
     id: number
     duration: number
   }) {
-    const convertLyrics = (lrc: string | undefined, duration: number) => {
+    const convertLyrics = (lrc?: string, duration?: number) => {
       if (!lrc) {
-        return null
+        return
       }
       const lines = []
       const meta = new Map()
@@ -281,10 +279,10 @@ export default class BilibiliPlatform implements Platform {
   }
 
   async song() {
-    const videoData = await BilibiliPlatform.fetchVideoData(this.bvid)
-    if (!videoData) {
-      return null
+    if (!this.bvid) {
+      return
     }
+    const videoData = await BilibiliPlatform.fetchVideoData(this.bvid)
     const title = videoData.View?.title as string | undefined ?? ''
     const staffs = (videoData.View?.staff as any[] | undefined)
       ?.map((staff) => staff?.name as string | undefined ?? '')
@@ -294,7 +292,7 @@ export default class BilibiliPlatform implements Platform {
         const type = tag?.tag_type as string | undefined
         const name = tag?.tag_name as string | undefined
         if (!type || !name) {
-          return undefined
+          return
         }
         return { type, name }
       })
@@ -305,7 +303,6 @@ export default class BilibiliPlatform implements Platform {
     const duration = (videoData.View?.pages as any[] | undefined)
       ?.find((pageInfo) => pageInfo?.page as number | undefined === this.page)
       ?.duration as number | undefined
-      ?? null
     const song = await BilibiliPlatform.searchSong({
       titles: [title, ...bgmTags],
       staffs,
@@ -313,7 +310,7 @@ export default class BilibiliPlatform implements Platform {
       targetDuration: duration,
     })
     if (!song) {
-      return null
+      return
     }
     return {
       name: song.name,
@@ -326,13 +323,13 @@ export default class BilibiliPlatform implements Platform {
   }
 
   async swatches() {
-    const videoData = await BilibiliPlatform.fetchVideoData(this.bvid)
-    if (!videoData) {
-      return null
+    if (!this.bvid) {
+      return
     }
-    const pic = videoData.View?.pic as string | undefined ?? null
+    const videoData = await BilibiliPlatform.fetchVideoData(this.bvid)
+    const pic = videoData.View?.pic as string | undefined
     if (!pic) {
-      return null
+      return
     }
     const palette = await Vibrant.from(pic).getPalette()
     const colors = [
@@ -346,29 +343,39 @@ export default class BilibiliPlatform implements Platform {
       .filter((color) => !!color)
       .toSorted((prev, next) => next.population - prev.population)
       .map((color) => new TinyColor(color.hex))
-    const background = colors[0] ?? new TinyColor('#333333')
-    const foreground = colors[1] ?? (background.isLight() ? new TinyColor('#333333') : new TinyColor('#ffffff'))
+    const background = colors.at(0)
+    if (!background) {
+      return
+    }
+    const foreground = colors.slice(1).toSorted(
+      (a, b) =>
+        (isReadable(background, b, { size: 'large' }) ? 1 : 0) - (isReadable(background, a, { size: 'large' }) ? 1 : 0) ||
+        readability(background, b) - readability(background, a),
+    ).at(0) ?? mostReadable(background, [], { includeFallbackColors: true })
+    if (!foreground) {
+      return
+    }
     return { background, foreground }
   }
 
   getMedia(document: Document) {
-    return document.getElementById('bilibili-player')?.getElementsByTagName('video').item(0) ?? null
+    return document.getElementById('bilibili-player')?.getElementsByTagName('video').item(0) ?? undefined
   }
 
-  static tryInstantiate(url: URL): Platform | null {
+  static tryInstantiate(url: URL): Platform | undefined {
     if (url.host !== 'www.bilibili.com') {
-      return null
+      return
     }
     return new BilibiliPlatform({
       bvid: (
-        url.pathname.startsWith('/video/') ? url.pathname.split('/')[2] ?? null :
-        url.pathname.startsWith('/list/') ? url.searchParams.get('bvid') :
-        null
+        url.pathname.startsWith('/video/') ? (url.pathname.split('/')[2] ?? undefined) :
+        url.pathname.startsWith('/list/') ? (url.searchParams.get('bvid') ?? undefined) :
+        undefined
       ),
       page: (
         url.pathname.startsWith('/video/') ? parseInt(url.searchParams.get('p') ?? '1') :
         url.pathname.startsWith('/list/') ? parseInt(url.searchParams.get('p') ?? '1') :
-        null
+        undefined
       ),
     })
   }
