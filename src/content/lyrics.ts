@@ -18,7 +18,7 @@ export default class Lyrics {
   }
 
   getTextByIndex(index: number) {
-    return this.lines.at(index)?.text
+    return index >= 0 ? this.lines.at(index)?.text : undefined
   }
 
   getSpan(time: number) {
@@ -58,7 +58,11 @@ export default class Lyrics {
     return this.meta.get(key)
   }
 
-  async detectLanguage() {
-    return (await chrome.i18n.detectLanguage(this.lines.map((line) => line.text).join('\n'))).languages.at(0)?.language
+  getLyricsJoined(separator: string = '\n') {
+    return this.lines.map((line) => line.text).join(separator)
   }
+
+  // async detectLanguage() {
+  //   return (await chrome.i18n.detectLanguage(this.lines.map((line) => line.text).join('\n'))).languages.at(0)?.language
+  // }
 }

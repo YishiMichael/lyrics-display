@@ -21,9 +21,9 @@ function useMonitoring<T>(callback: () => T) {
   return value.current
 }
 
-function useAnimationFrame<T>(closure: () => () => T, initial: T, deps?: React.DependencyList) {
+function useAnimationFrame<T>(closure: () => () => T, deps?: React.DependencyList) {
   const frame = React.useRef<number | undefined>(undefined)
-  const [value, setValue] = React.useState(initial)
+  const [value, setValue] = React.useState(closure())
 
   React.useEffect(() => {
     const callback = closure()
@@ -43,29 +43,53 @@ function useAnimationFrame<T>(closure: () => () => T, initial: T, deps?: React.D
   return value
 }
 
-function useAsyncMemo<T>(callback: () => Promise<T | undefined> | undefined, deps?: React.DependencyList) {
-  const [value, setValue] = React.useState<T | undefined>(undefined)
-  const generation = React.useRef(0)
+// https://github.com/streamich/react-use/blob/master/src/useAsyncFn.ts
+function useAsyncHistory<T>(
+  callback: () => Promise<T | undefined>,
+  fallback: T,
+  deps?: React.DependencyList,
+) {
+  const lastCallId = React.useRef(0)
+  const isMounted = React.useRef(false)
+  const valuesHistory = React.useRef<T[]>([])
+  const [generation, setGeneration] = React.useState(0)
+
+  const updateValue = (value: T = fallback) => {
+    if (!Object.is(value, valuesHistory.current.at(0) ?? fallback)) {
+      setGeneration(valuesHistory.current.unshift(value))
+    }
+  }
 
   React.useEffect(() => {
-    const promise = callback()
-    if (!promise) {
-      setValue(undefined)
-      return
-    }
-
-    const currentGeneration = ++generation.current
-    let cancelled = false
-    promise.then((value) => {
-      setValue(!cancelled && currentGeneration === generation.current ? value : undefined)
-    })
+    isMounted.current = true
 
     return () => {
-      cancelled = true
+      isMounted.current = false
     }
+  }, [])
+
+  React.useEffect(() => {
+    const callId = ++lastCallId.current
+
+    callback().then(
+      (value) => {
+        if (isMounted.current && callId === lastCallId.current) {
+          updateValue(value)
+        }
+        return value
+      },
+      (error) => {
+        if (isMounted.current && callId === lastCallId.current) {
+          updateValue()
+        }
+        return error
+      },
+    )
   }, deps)
 
-  return value
+  return React.useCallback((offset: number = 0) => {
+    return valuesHistory.current.at(offset) ?? fallback
+  }, [generation])
 }
 
 function useFrequencyWave(media?: HTMLMediaElement) {
@@ -136,6 +160,7 @@ function ScrollingText(props: {
   x: number
   y: number
   width: number
+  bufferWidth: number
   align?: string
   verticalAlign?: string
   fontSize: number
@@ -153,7 +178,7 @@ function ScrollingText(props: {
     wrap: 'none',
   })
   const measuredWidth = konvaTemplate.measureSize(props.text).width
-  const bufferedMeasuredWidth = measuredWidth + 40.0
+  const bufferMeasuredWidth = measuredWidth + props.bufferWidth
 
   return measuredWidth <= props.width ? (
     <>
@@ -174,13 +199,13 @@ function ScrollingText(props: {
     <>
       <ReactKonva.Text
         text={props.text}
-        x={props.x - props.scrollingOffset % bufferedMeasuredWidth}
+        x={props.x - props.scrollingOffset % bufferMeasuredWidth}
         y={props.y}
         verticalAlign={props.verticalAlign}
         fontSize={props.fontSize}
         fontFamily={props.fontFamily}
-        fillLinearGradientStartPoint={{ x: props.scrollingOffset % bufferedMeasuredWidth, y: 0 }}
-        fillLinearGradientEndPoint={{ x: props.scrollingOffset % bufferedMeasuredWidth + props.width, y: 0 }}
+        fillLinearGradientStartPoint={{ x: props.scrollingOffset % bufferMeasuredWidth, y: 0 }}
+        fillLinearGradientEndPoint={{ x: props.scrollingOffset % bufferMeasuredWidth + props.width, y: 0 }}
         fillLinearGradientColorStops={[
           0.0, props.foreground.clone().setAlpha(0.0).toHex8String(),
           0.1, props.foreground.toHex8String(),
@@ -191,13 +216,13 @@ function ScrollingText(props: {
       />
       <ReactKonva.Text
         text={props.text}
-        x={props.x - (props.scrollingOffset % bufferedMeasuredWidth - bufferedMeasuredWidth)}
+        x={props.x - (props.scrollingOffset % bufferMeasuredWidth - bufferMeasuredWidth)}
         y={props.y}
         verticalAlign={props.verticalAlign}
         fontSize={props.fontSize}
         fontFamily={props.fontFamily}
-        fillLinearGradientStartPoint={{ x: props.scrollingOffset % bufferedMeasuredWidth - bufferedMeasuredWidth, y: 0 }}
-        fillLinearGradientEndPoint={{ x: props.scrollingOffset % bufferedMeasuredWidth - bufferedMeasuredWidth + props.width, y: 0 }}
+        fillLinearGradientStartPoint={{ x: props.scrollingOffset % bufferMeasuredWidth - bufferMeasuredWidth, y: 0 }}
+        fillLinearGradientEndPoint={{ x: props.scrollingOffset % bufferMeasuredWidth - bufferMeasuredWidth + props.width, y: 0 }}
         fillLinearGradientColorStops={[
           0.0, props.foreground.clone().setAlpha(0.0).toHex8String(),
           0.1, props.foreground.toHex8String(),
@@ -219,17 +244,16 @@ function LyricsLines(props: {
   height: number
   focusOffset: number
   lineHeight: number
-  jumpTime: number
+  jumpTime?: number
   fontSize: number
   fontFamily: string
   foreground: TinyColor
+  strokeWidth?: number
 }) {
-  function* integersInOpenInterval(a: number, b: number) {
+  function integersInOpenInterval(a: number, b: number) {
     const start = Math.floor(a) + 1
     const end = Math.ceil(b) - 1
-    for (let x = start; x <= end; ++x) {
-      yield x
-    }
+    return Array.from({ length: end - start + 1 }).map((_, index) => index + start)
   }
 
   if (!props.lyrics) {
@@ -243,13 +267,15 @@ function LyricsLines(props: {
   })
   const span = props.lyrics.getSpan(props.currentTime)
   const readProportion = (props.currentTime - span.startTime) / (span.stopTime - span.startTime) || 0.0
-  const jumpProportion = Math.max(1.0 - (props.currentTime - span.startTime) / Math.min(props.jumpTime, span.stopTime - span.startTime), 0.0) || 0.0
+  const jumpProportion = props.jumpTime
+    ? Math.max(1.0 - (props.currentTime - span.startTime) / Math.min(props.jumpTime, span.stopTime - span.startTime), 0.0) || 0.0
+    : 0.0
   const focusOffset = props.focusOffset + jumpProportion * props.lineHeight
 
-  return Array.from(integersInOpenInterval(
+  return integersInOpenInterval(
     (-0.5 * props.fontSize - focusOffset) / props.lineHeight,
     (props.height + 0.5 * props.fontSize - focusOffset) / props.lineHeight,
-  )).map((indexOffset) => {
+  ).map((indexOffset) => {
     const text = props.lyrics?.getTextByIndex(span.index + indexOffset)
     const measuredWidth = text ? konvaTemplate.measureSize(text).width : 0.0
     const offset = focusOffset + indexOffset * props.lineHeight
@@ -283,7 +309,7 @@ function LyricsLines(props: {
             1.0, props.foreground.toHex8String(),
           ],
           stroke: props.foreground.darken(50).toHex8String(),
-          strokeWidth: 1,
+          strokeWidth: props.strokeWidth,
           fillAfterStrokeEnabled: true,
         }}
       />
@@ -316,17 +342,17 @@ function AudioSpectrumBars(props: {
   ))
 }
 
-const DEFAULT_SWATCHES = {
-  background: new TinyColor('#333333'),
-  foreground: new TinyColor('#eeeeee'),
+function fontFamilyByLang(lang: string = 'zh') {
+  switch (lang) {
+  case 'zh':
+    return 'Source Han Serif SC VF, serif'
+  case 'jp':
+    return 'Source Han Serif JP VF, Source Han Serif SC VF, serif'
+  case 'en':
+    return 'Georgia, Source Han Serif SC VF, serif'
+  }
+  return 'Source Han Serif SC VF, serif'
 }
-
-const DEFAULT_FONT_FAMILY = 'Source Han Serif SC VF, serif'
-const FONT_FAMILY_MAP = new Map([
-  ['zh', 'Source Han Serif SC VF, serif'],
-  ['jp', 'Source Han Serif JP VF, Source Han Serif SC VF, serif'],
-  ['en', 'Georgia, Source Han Serif SC VF, serif'],
-])
 
 export default function Display(props: {
   setAppVisible: React.Dispatch<React.SetStateAction<boolean>>
@@ -340,18 +366,45 @@ export default function Display(props: {
 
   const platform = React.useMemo(() => tryInstantiatePlatform(new URL(url)), [url])
 
-  const swatches = useAsyncMemo(() => platform?.swatches(), [platform]) ?? DEFAULT_SWATCHES
+  const getSwatches = useAsyncHistory(async () => {
+    return await platform?.swatches()
+  }, {
+    background: new TinyColor('#333333'),
+    foreground: new TinyColor('#eeeeee'),
+  }, [platform])
 
-  const song = useAsyncMemo(() => platform?.song(), [platform])
+  const swatches = useAnimationFrame(() => {
+    const start = performance.now()
+    const current = getSwatches()
+    const previous = getSwatches(1)
+    return () => {
+      const elapsed = (performance.now() - start) / 1000.0
+      return elapsed > 2.0 ? current : {
+        background: previous.background.mix(current.background, elapsed / 2.0 * 100.0),
+        foreground: previous.foreground.mix(current.foreground, elapsed / 2.0 * 100.0),
+      }
+    }
+  }, [getSwatches])
 
-  const elapsed = useAnimationFrame(() => {
+  const song = useAsyncHistory(async () => {
+    return await platform?.song()
+  }, {
+    name: '',
+    artists: [],
+    lyrics: {},
+  }, [platform])()
+
+  const songElapsed = useAnimationFrame(() => {
     const start = performance.now()
     return () => (performance.now() - start) / 1000.0
-  }, 0.0, [song])
+  }, [song])
 
-  const fontFamily = useAsyncMemo(() => {
-    return song?.lyrics.original?.detectLanguage().then((lang) => lang ? FONT_FAMILY_MAP.get(lang) : undefined)
-  }, [song]) ?? DEFAULT_FONT_FAMILY
+  const fontFamily = useAsyncHistory(async () => {
+    const lyrics = song.lyrics.original?.getLyricsJoined()
+    const languageDetectionResult = lyrics ? await chrome.i18n.detectLanguage(lyrics) : undefined
+    const lang = languageDetectionResult?.languages.at(0)?.language
+    return fontFamilyByLang(lang)
+  }, fontFamilyByLang(), [song])()
 
   const media = useMonitoring(() => platform?.getMedia(document))
 
@@ -361,7 +414,7 @@ export default function Display(props: {
 
   const currentTime = useAnimationFrame(() => {
     return () => media?.currentTime ?? 0.0
-  }, 0.0, [media])
+  }, [media])
 
   const frequencyWave = useFrequencyWave(media)
 
@@ -386,33 +439,35 @@ export default function Display(props: {
           foreground={swatches.foreground}
         />
         <ScrollingText
-          text={song?.name}
+          text={song.name}
           x={20}
           y={20}
-          width={360}
+          width={260}
+          bufferWidth={40}
           fontSize={20}
           fontFamily={fontFamily}
           foreground={swatches.foreground}
           align='left'
           verticalAlign='top'
-          scrollingOffset={20.0 * elapsed}
+          scrollingOffset={20.0 * songElapsed}
         />
         <ScrollingText
-          text={song?.artists.join(' | ')}
-          x={420}
+          text={song.artists.join(' | ')}
+          x={320}
           y={20}
-          width={160}
+          width={260}
+          bufferWidth={40}
           fontSize={15}
           fontFamily={fontFamily}
           foreground={swatches.foreground}
           align='right'
           verticalAlign='top'
-          scrollingOffset={20.0 * elapsed}
+          scrollingOffset={20.0 * songElapsed}
         />
-        {song?.lyrics.translated ? (
+        {song.lyrics.translated ? (
           <>
             <LyricsLines
-              lyrics={song?.lyrics.original}
+              lyrics={song.lyrics.original}
               currentTime={currentTime}
               x={50}
               y={50}
@@ -420,13 +475,13 @@ export default function Display(props: {
               height={50}
               focusOffset={25}
               lineHeight={50}
-              jumpTime={0.0}
               fontSize={30}
               fontFamily={fontFamily}
               foreground={swatches.foreground}
+              strokeWidth={1}
             />
             <LyricsLines
-              lyrics={song?.lyrics.translated}
+              lyrics={song.lyrics.translated}
               currentTime={currentTime}
               x={50}
               y={100}
@@ -434,16 +489,16 @@ export default function Display(props: {
               height={50}
               focusOffset={20}
               lineHeight={40}
-              jumpTime={0.0}
               fontSize={20}
-              fontFamily={fontFamily}
+              fontFamily={fontFamilyByLang()}
               foreground={swatches.foreground}
+              strokeWidth={1}
             />
           </>
         ) : (
           <>
             <LyricsLines
-              lyrics={song?.lyrics.original}
+              lyrics={song.lyrics.original}
               currentTime={currentTime}
               x={50}
               y={50}
@@ -455,6 +510,7 @@ export default function Display(props: {
               fontSize={30}
               fontFamily={fontFamily}
               foreground={swatches.foreground}
+              strokeWidth={1}
             />
           </>
         )}

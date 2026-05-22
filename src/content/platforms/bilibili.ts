@@ -172,6 +172,8 @@ export default class BilibiliPlatform implements Platform {
         }
       })
       .filter((song) => !!song)
+      .toSorted((a, b) => a.id - b.id)
+      .filter((item, index, songs) => index === 0 || item.id !== songs[index - 1].id)
       .map((song) => {
         const nameScore = Math.max(
           ...[song.name, extractTitle(song.name), ...song.alias]
@@ -216,7 +218,10 @@ export default class BilibiliPlatform implements Platform {
           percentage,
         }
       })
-      .toSorted((a, b) => b.percentage - a.percentage || b.pop - a.pop)
+      .toSorted((a, b) =>
+        b.percentage - a.percentage ||
+        b.pop - a.pop
+      )
 
     console.table(songs.map((song) => {
       return {
@@ -268,8 +273,8 @@ export default class BilibiliPlatform implements Platform {
     const lyricsResponse = await BilibiliPlatform.postEapi('song/lyric', {
       id: song.id,
       lv: -1,
-      kv: -1,
       tv: -1,
+      kv: -1,
     })
     return {
       original: convertLyrics(lyricsResponse?.lrc?.lyric, song.duration),
