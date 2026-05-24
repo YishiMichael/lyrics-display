@@ -61,8 +61,4 @@ export default class Lyrics {
   getLyricsJoined(separator: string = '\n') {
     return this.lines.map((line) => line.text).join(separator)
   }
-
-  // async detectLanguage() {
-  //   return (await chrome.i18n.detectLanguage(this.lines.map((line) => line.text).join('\n'))).languages.at(0)?.language
-  // }
 }

@@ -72,59 +72,54 @@ export default class BilibiliPlatform implements Platform {
   }
 
   static async searchSong(opts: {
-    titles: string[]
+    keywords: string[]
     staffs: string[]
+    titles: string[]
     tags: string[]
     targetDuration?: number
   }) {
-    const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b) / arr.length : 0.0
+    const avg = (...arr: number[]) => arr.length ? arr.reduce((a, b) => a + b) / arr.length : 0.0
 
     const segmentRegex =
       /\p{N}+|[\p{sc=Hani}\p{sc=Hira}\p{sc=Kana}\p{sc=Hang}]+|\p{sc=Latn}+|(?<![\p{sc=Hani}\p{sc=Hira}\p{sc=Kana}\p{sc=Hang}\p{sc=Latn}])\p{L}+/gu
     const splitSegments = (text: string) =>
       Array.from(text.normalize('NFKC').toLowerCase().matchAll(segmentRegex)).map((g) => g[0])
 
-    const similarityScore = (text: string, candidates: string[]) => {
-      const segments = splitSegments(text)
+    const similarityScoring = (...candidates: string[]) => {
       const candidateSegments = candidates.flatMap(splitSegments)
-      return avg(segments.map((segment) => {
-        const maxDistance = Math.ceil(0.5 * segment.length)
-        const closest = closestMatch(segment, candidateSegments, { maxDistance })
-        if (!closest) {
-          return 0.0
+      return (...avoids: string[]) => {
+        const avoidSegments = new Set(avoids.flatMap(splitSegments))
+        return (text: string) => {
+          const { weightedScore, totalLength } = splitSegments(text)
+            .filter((segment) => !avoidSegments.has(segment))
+            .map((segment) => {
+              const maxDistance = Math.ceil(0.5 * segment.length)
+              const closest = closestMatch(segment, candidateSegments, { maxDistance })
+              return {
+                length: segment.length,
+                score: closest ? Math.max(1.0 - leven(segment, closest, { maxDistance }) / maxDistance, 0.0) : 0.0,
+              }
+            })
+            .reduce((accum, { length, score }) => {
+              return {
+                weightedScore: accum.weightedScore + length * score,
+                totalLength: accum.totalLength + length,
+              }
+            }, {
+              weightedScore: 0.0,
+              totalLength: 0,
+            })
+          return totalLength ? weightedScore / totalLength : 0.0
         }
-        const distance = leven(segment, closest, { maxDistance })
-        return Math.max(1.0 - distance / maxDistance, 0.0)
-      }))
+      }
     }
 
     const durationDiffScore = (duration: number, targetDuration: number) =>
       Math.min(Math.pow(0.5, Math.abs(targetDuration - duration) / 15.0 - 1.0), 1.0)
 
-    const extractTitle = (text: string) => text
-      .replaceAll(/\u3010.*?\u3011/g, '')
-      .replaceAll(/\uff08.*?\uff09/g, '')
-      .replaceAll(/\(.*?\)/g, '')
-      .replaceAll(/\[.*?\]/g, '')
-      .replaceAll(/\bfeat\..+/g, '')
-      .replaceAll(/\bvo\..+/g, '')
-      .trim()
-
-    const keywords = opts.titles
-      .flatMap((title) => [
-        title,
-        ...Array.from(title.matchAll(/\u300a(.*?)\u300b/g)).map((g) => g[1]),
-        ...Array.from(title.matchAll(/\u300e(.*?)\u300f/g)).map((g) => g[1]),
-        ...Array.from(title.matchAll(/\u300c(.*?)\u300d/g)).map((g) => g[1]),
-      ])
-      .filter((text) => !!text)
-      .map(extractTitle)
-      .filter((text) => !!text)
-      .map((text) => splitSegments(text).join(' '))
-
     const songs = (await Promise.all(
-      Array.from(new Set(keywords)).flatMap((keyword) => BilibiliPlatform.postEapi('cloudsearch/pc', {
-        s: keyword,
+      opts.keywords.flatMap((keyword) => BilibiliPlatform.postEapi('cloudsearch/pc', {
+        s: splitSegments(keyword).join(' '),
         type: 1,
         limit: 50,
       })))
@@ -175,51 +170,45 @@ export default class BilibiliPlatform implements Platform {
       .toSorted((a, b) => a.id - b.id)
       .filter((item, index, songs) => index === 0 || item.id !== songs[index - 1].id)
       .map((song) => {
-        const nameScore = Math.max(
-          ...[song.name, extractTitle(song.name), ...song.alias]
-            .map((name) => similarityScore(name, [...opts.titles, ...opts.staffs, ...opts.tags])),
-        )
-        const artistScore = avg(song.artists.map((artist) => Math.max(
-          ...[artist.name, ...artist.alias]
-            .map((name) => similarityScore(name, [...opts.titles, ...opts.staffs, ...opts.tags])),
-        )))
-        const titleScore = Math.max(...opts.titles.map((title) => similarityScore(
-          title,
-          [song.name, ...song.alias, ...song.artists.flatMap((artist) => [artist.name, ...artist.alias])],
-        )))
-        const staffScore = avg(opts.staffs.map((staff) => similarityScore(
-          staff,
-          [song.name, ...song.alias, ...song.artists.flatMap((artist) => [artist.name, ...artist.alias])],
-        )))
-        const tagScore = avg(opts.tags.map((tag) => similarityScore(
-          tag,
-          [song.name, ...song.alias, ...song.artists.flatMap((artist) => [artist.name, ...artist.alias])],
-        )))
+        const songScoring = similarityScoring(...opts.staffs, ...opts.titles, ...opts.tags)
+        const artistScore = ((scoring) => avg(...song.artists.map((artist) => Math.max(
+          ...[artist.name, ...artist.alias].map(scoring),
+        ))))(songScoring())
+        const nameScore = ((scoring) => Math.max(
+          ...[song.name, ...song.alias].map(scoring),
+        ))(songScoring(...song.artists.flatMap((artist) => [artist.name, ...artist.alias])))
+
+        const mediaScoring = similarityScoring(...song.artists.flatMap((artist) => [artist.name, ...artist.alias]), ...[song.name, ...song.alias])
+        const staffScore = ((scoring) => avg(...opts.staffs.map(scoring)))(mediaScoring())
+        const titleScore = ((scoring) => avg(...opts.titles.map(scoring)))(mediaScoring(...opts.staffs))
+        const tagScore = ((scoring) => avg(...opts.tags.map(scoring)))(mediaScoring(...opts.staffs, ...opts.titles))
+
         const durationScore = opts.targetDuration ? durationDiffScore(song.duration, opts.targetDuration) : 1.0
-        const percentage = Math.round((
-            30.0 * nameScore
-          + 20.0 * artistScore
-          + 20.0 * titleScore
-          + 20.0 * staffScore
-          + 10.0 * tagScore
+        const permillage = Math.round((
+            250.0 * artistScore
+          + 250.0 * nameScore
+          + 200.0 * staffScore
+          + 200.0 * titleScore
+          + 100.0 * tagScore
         ) * durationScore)
+
         return {
           id: song.id,
           name: song.name,
           artists: song.artists.map((artist) => artist.name),
           duration: song.duration,
           pop: song.pop,
-          nameScore,
           artistScore,
-          titleScore,
+          nameScore,
           staffScore,
+          titleScore,
           tagScore,
           durationScore,
-          percentage,
+          permillage,
         }
       })
       .toSorted((a, b) =>
-        b.percentage - a.percentage ||
+        b.permillage - a.permillage ||
         b.pop - a.pop
       )
 
@@ -228,19 +217,19 @@ export default class BilibiliPlatform implements Platform {
         name: song.name,
         artists: song.artists.join(' | '),
         duration: song.duration,
-        nameScore: song.nameScore,
         artistScore: song.artistScore,
-        titleScore: song.titleScore,
+        nameScore: song.nameScore,
         staffScore: song.staffScore,
+        titleScore: song.titleScore,
         tagScore: song.tagScore,
         durationScore: song.durationScore,
-        percentage: song.percentage,
+        permillage: song.permillage,
         pop: song.pop,
       }
     }))
 
     const song = songs.at(0)
-    return song && song.percentage >= 25 ? song : undefined
+    return song && song.permillage >= 200 ? song : undefined
   }
 
   static async fetchLyrics(song: {
@@ -308,9 +297,27 @@ export default class BilibiliPlatform implements Platform {
     const duration = (videoData.View?.pages as any[] | undefined)
       ?.find((pageInfo) => pageInfo?.page as number | undefined === this.page)
       ?.duration as number | undefined
+    const titles = [title, ...bgmTags]
     const song = await BilibiliPlatform.searchSong({
-      titles: [title, ...bgmTags],
+      keywords: titles
+        .flatMap((title) => [
+          title,
+          ...Array.from(title.matchAll(/\u300a(.*?)\u300b/g)).map((g) => g[1]),
+          ...Array.from(title.matchAll(/\u300e(.*?)\u300f/g)).map((g) => g[1]),
+          ...Array.from(title.matchAll(/\u300c(.*?)\u300d/g)).map((g) => g[1]),
+        ])
+        .map((text) => text
+          .replaceAll(/\u3010.*?\u3011/g, '')
+          .replaceAll(/\uff08.*?\uff09/g, '')
+          .replaceAll(/\(.*?\)/g, '')
+          .replaceAll(/\[.*?\]/g, '')
+          .replaceAll(/\bfeat\..+/g, '')
+          .replaceAll(/\bvo\..+/g, '')
+          .trim()
+        )
+        .filter((text) => !!text),
       staffs,
+      titles,
       tags: channelTags,
       targetDuration: duration,
     })
@@ -373,7 +380,7 @@ export default class BilibiliPlatform implements Platform {
     }
     return new BilibiliPlatform({
       bvid: (
-        url.pathname.startsWith('/video/') ? (url.pathname.split('/')[2] ?? undefined) :
+        url.pathname.startsWith('/video/') ? url.pathname.split('/')[2] :
         url.pathname.startsWith('/list/') ? (url.searchParams.get('bvid') ?? undefined) :
         undefined
       ),

@@ -305,10 +305,10 @@ function LyricsLines(props: {
           fillLinearGradientStartPoint: { x: 0, y: 0.0 },
           fillLinearGradientEndPoint: { x: 0, y: props.fontSize },
           fillLinearGradientColorStops: [
-            0.0, props.foreground.lighten(50).toHex8String(),
+            0.0, props.foreground.tint(50).toHex8String(),
             1.0, props.foreground.toHex8String(),
           ],
-          stroke: props.foreground.darken(50).toHex8String(),
+          stroke: props.foreground.shade(50).toHex8String(),
           strokeWidth: props.strokeWidth,
           fillAfterStrokeEnabled: true,
         }}
